@@ -1,0 +1,1 @@
+[{"name": "Firefox", "version": "unspecified", "arch": "amd64", "method": "apt", "runtime": "none", "limitations": "Ubuntu ships it as snap transitional package; not tested on NX", "tested_nx": "none", "last_verified": "never", "status": "planned"}]

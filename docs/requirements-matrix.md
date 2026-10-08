@@ -1,0 +1,14 @@
+# Requirements matrix (evidence = what actually ran on 2026-10-08)
+| ID | Requirement | Status | Source | Test | Limits |
+|---|---|---|---|---|---|
+| NX-BOOT-1 | Bootable live ISO (BIOS) | Tested (QEMU/TCG, reached login) | build/build-iso.sh | tests/vm/boot-test.sh | no real hardware, no KVM |
+| NX-BOOT-2 | UEFI boot | Tested (OVMF/TCG, reached login) | tests/vm/boot-test-uefi.sh | OVMF/TCG | Secure Boot not supported |
+| NX-INST-1 | Empty-disk install | Planned | installer/calamares (scaffold) | none | not in ISO |
+| NX-INST-2 | Dual boot with Windows | Planned | - | none | - |
+| NX-AI-1 | Safe tool broker | Implemented + unit tested (8 tests) | ai/service/broker.py | tests/unit/test_broker.py | no Brok, no PolicyKit yet |
+| NX-AI-2 | Brok adapter | Planned | - | none | Brok is Qt6/Python, not yet inspected in depth |
+| NX-APP-1 | Compatibility DB + validator | Implemented + unit tested | compatibility/ | tests/unit/test_compat.py | 1 placeholder entry |
+| NX-WIN-1 | Windows 7+ media tool | Core tested on Python 3.12; GUI untested | windows/media-tool | tests/unit/test_nxverify.py | no Win7/Py3.8 test |
+| NX-DESK-1 | NX desktop | Planned | - | none | - |
+| NX-SC-1 | Software Center | Planned | - | none | - |
+| NX-ARCH-1 | 32-bit / ARM64 | Not supported / not started | - | none | - |

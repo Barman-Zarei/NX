@@ -1,0 +1,3 @@
+{"required": ["name", "version", "arch", "method", "runtime", "limitations", "tested_nx", "last_verified", "status"],
+ "methods": ["apt", "flatpak", "appimage", "snap", "wine", "proton", "source"],
+ "statuses": ["planned", "tested", "verified", "not_supported"]}

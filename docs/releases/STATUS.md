@@ -19,3 +19,9 @@
 - Third build added kernel args `username=nx hostname=nx userfullname=NX` in `build/config/grub.cfg`.
 - QEMU BIOS/TCG boot of that ISO: PASS. Serial output showed the banner "NX OS 0.0.1 (pre-alpha)" and the prompt `nx login:`; no md5check failure or "user does not exist" lines were matched by the grep (full log not archived).
 - Still untested: UEFI, graphical session, installation, networking, persistence. Live login is nx/nx (live image only).
+
+## Session 1, final
+- UEFI boot (OVMF, TCG, `tests/vm/boot-test-uefi.sh`): PASS, reached login. Secure Boot not tested/supported.
+- Added `ai/service/broker.py` (allowlist, approval, untrusted-source block, audit log) and `compatibility/validate.py`. `python3 -m unittest discover -s tests/unit`: 13 tests passed (Python 3.12).
+- Added scaffolds (NOT functional): `installer/calamares/`, `.github/workflows/ci.yml` (never run on GitHub).
+- Brok adapter, desktop, Software Center, installer integration, dual boot: not implemented.
