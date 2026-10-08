@@ -1,0 +1,6 @@
+PRETTY_NAME="NX OS 0.0.1 (pre-alpha)"
+NAME="NX OS"
+VERSION_ID="0.0.1"
+ID=nx
+ID_LIKE="ubuntu debian"
+UBUNTU_CODENAME=noble
