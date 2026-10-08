@@ -14,3 +14,8 @@
 
 **Not implemented:** installer, desktop, Brok adapter, Software Center, Secure Boot, 32-bit, ARM64, dual boot; Windows GUI is untested scaffolding.
 **Next:** rebuild, rerun boot test, then Calamares empty-disk install in a VM.
+
+## Session 1, update
+- Third build added kernel args `username=nx hostname=nx userfullname=NX` in `build/config/grub.cfg`.
+- QEMU BIOS/TCG boot of that ISO: PASS. Serial output showed the banner "NX OS 0.0.1 (pre-alpha)" and the prompt `nx login:`; no md5check failure or "user does not exist" lines were matched by the grep (full log not archived).
+- Still untested: UEFI, graphical session, installation, networking, persistence. Live login is nx/nx (live image only).
