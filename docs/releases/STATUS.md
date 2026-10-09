@@ -41,3 +41,11 @@
 - `tests/unit/test_brok_adapter.py`: 7 tests passed as a NON-root user (against real Brok `doctor` offline: all providers unreachable, parsed correctly; `ask` offline returned a status without crashing). As root, 5 skip by design.
 - NOT tested: a configured local model (no Ollama here), cloud providers, voice, desktop integration, PolicyKit, installing Brok into the ISO, Brok dependencies on the target image.
 - Brok mainline needs Qt 6; Windows 7 stays unsupported there (legacy branch plan unchanged).
+
+## Session 1, alongside install (2026-10-09)
+**Ran** (manual procedure, scripts in `installer/`): 8 GiB GPT image with ESP (FAT32 + dummy `EFI/Microsoft/Boot/bootmgfw.efi`), 2.9 GiB NTFS "windows" partition (mkntfs, random marker data), 5 GiB free.
+- Without `--yes-i-am-sure`: prints plan and refuses. On non-GPT/empty disk: refuses. After a bug fix (ESP flag and free-space parsing, found by the first runs refusing wrongly), install rc=0.
+- After install: NTFS partition SHA-256 identical, partition table rows 1-2 identical, `bootmgfw.efi` hash identical, `EFI/BOOT` not created, new ext4 partition 3 and `EFI/NX/grubx64.efi` present, generated grub.cfg has "NX OS" and "Windows" entries.
+- UEFI/OVMF/TCG boot of that disk reached `nx login:`, **but only after I copied `grubx64.efi` to `EFI/BOOT/BOOTX64.EFI` in a test copy** to simulate a firmware boot entry (no NVRAM entry could be created in the VM).
+**Not verified:** real Windows (chainload entry only checked as text; bootmgfw.efi is a dummy), efibootmgr path, BitLocker, Secure Boot, MBR/BIOS, real disks, repeat installs.
+- `.github/workflows/ci.yml` rewritten (lint, unit tests, ISO build, BIOS+UEFI boot tests); never run on GitHub.

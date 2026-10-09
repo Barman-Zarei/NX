@@ -1,0 +1,8 @@
+Target: /dev/loop0 (  4G), existing partitions: 2, mode: alongside
+== NX install 2026-10-09T04:46:14Z ==
+note: not booted in UEFI mode; installing anyway (boot files go on the ESP)
+Using free space 1125MiB-4095MiB; existing ESP is partition 1
+sh: 1: udevadm: not found
+sh: 1: udevadm: not found
+userdel: nx mail spool (/var/mail/nx) not found
+Could not get geometry of device (Inappropriate ioctl for device)Could not get geometry of device (Inappropriate ioctl for device)== NX install finished OK ==

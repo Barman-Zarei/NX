@@ -1,0 +1,74 @@
+#!/bin/bash
+# NX alongside installer (experimental, UEFI/GPT only). Installs NX into FREE SPACE on a disk that already has an OS.
+# Never formats, resizes, deletes or edits existing partitions; never overwrites EFI/BOOT/BOOTX64.EFI or EFI/Microsoft.
+# Adds: one new ext4 root partition, EFI/NX/grubx64.efi on the existing ESP, and a chainload entry for Windows if found.
+set -euo pipefail
+usage() { echo "usage: nx-install-alongside --disk /dev/X --source <dir with casper/> --user NAME [--hostname H] [--size-mib N] --yes-i-am-sure DISK"; exit 2; }
+DISK=""; SRC=""; USERN=""; HOSTN="nx"; SIZE=0; CONFIRM=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --disk) DISK="$2"; shift 2;; --source) SRC="$2"; shift 2;; --user) USERN="$2"; shift 2;; --hostname) HOSTN="$2"; shift 2;;
+    --size-mib) SIZE="$2"; shift 2;; --yes-i-am-sure) CONFIRM="$2"; shift 2;; *) usage;;
+  esac
+done
+[ -n "$DISK" ] && [ -n "$SRC" ] && [ -n "$USERN" ] || usage
+[ "$(id -u)" -eq 0 ] || { echo "must run as root" >&2; exit 1; }
+[ -b "$DISK" ] || { echo "not a block device: $DISK" >&2; exit 1; }
+[[ "$USERN" =~ ^[a-z][a-z0-9_-]{0,30}$ ]] || { echo "invalid user name" >&2; exit 1; }
+[[ "$HOSTN" =~ ^[a-z0-9][a-z0-9-]{0,62}$ ]] || { echo "invalid hostname" >&2; exit 1; }
+[[ "$SIZE" =~ ^[0-9]+$ ]] || { echo "invalid --size-mib" >&2; exit 1; }
+[ -f "$SRC/casper/filesystem.squashfs" ] && [ -f "$SRC/casper/vmlinuz" ] && [ -f "$SRC/casper/initrd" ] || { echo "bad --source" >&2; exit 1; }
+[ -n "${NX_PASSWORD:-}" ] || { echo "set NX_PASSWORD in the environment" >&2; exit 1; }
+if lsblk -nr -o MOUNTPOINT "$DISK" | grep -q .; then echo "refusing: $DISK has mounted filesystems" >&2; exit 1; fi
+[ "$(blkid -p -o value -s PTTYPE "$DISK" 2>/dev/null)" = "gpt" ] || { echo "refusing: alongside install needs an existing GPT disk (UEFI)" >&2; exit 1; }
+P=""; case "$DISK" in *[0-9]) P="p";; esac
+PT=$(parted -sm "$DISK" unit MiB print free)
+ESPN=$(echo "$PT" | awk -F: '$1 ~ /^[0-9]+$/ && $5 !~ /^free/ && $7 ~ /(^|[, ])esp(,|;|$)/ {print $1; exit}')
+[ -n "$ESPN" ] || { echo "refusing: no EFI System Partition found" >&2; exit 1; }
+# largest free segment (MiB), must be >= 4096
+BEST=$(echo "$PT" | awk -F: '$5 ~ /^free;?$/{gsub("MiB","",$2);gsub("MiB","",$3);gsub("MiB","",$4); print $4, $2, $3}' | sort -rn | head -n1)
+read -r FSIZE FSTART FEND <<< "$BEST"
+FSIZE=${FSIZE%.*}; FSTART=${FSTART%.*}; FEND=${FEND%.*}
+[ "${FSIZE:-0}" -ge 4096 ] || { echo "refusing: need >= 4096 MiB contiguous free space (largest: ${FSIZE:-0} MiB)" >&2; exit 1; }
+START=$((FSTART + 1)); END=$FEND; [ "$SIZE" -gt 0 ] && [ "$SIZE" -lt $((FSIZE - 2)) ] && END=$((START + SIZE))
+echo "Disk: $DISK ($(lsblk -dn -o SIZE "$DISK")); ESP: partition $ESPN (kept, not formatted)"
+echo "Plan: create ONE new partition ${START}MiB-${END}MiB (ext4). No existing partition is modified."
+[ "$CONFIRM" = "$DISK" ] || { echo "refusing: re-run with --yes-i-am-sure $DISK to apply the plan above" >&2; exit 1; }
+LOG=/var/log/nx-install.log; exec > >(tee -a "$LOG") 2>&1
+M=/mnt/nx-target; mkdir -p "$M"; trap 'umount -R "$M" 2>/dev/null || true' EXIT
+BEFORE=$(lsblk -nr -o NAME "$DISK" | sort)
+parted -s "$DISK" mkpart nx-root ext4 "${START}MiB" "${END}MiB"
+command -v udevadm >/dev/null && udevadm settle || true; sleep 1
+NEWN=$(parted -sm "$DISK" print | awk -F: '$6=="nx-root"{n=$1} END{print n}')
+[ -n "$NEWN" ] || { echo "could not find new partition" >&2; exit 1; }
+echo "$BEFORE" | grep -q "${DISK##*/}${P}${NEWN}$" && { echo "new partition number collides with existing; aborting" >&2; exit 1; }
+RP="${DISK}${P}${NEWN}"; EP="${DISK}${P}${ESPN}"
+mkfs.ext4 -q -F -L nx-root "$RP"
+mount "$RP" "$M"
+unsquashfs -f -d "$M" "$SRC/casper/filesystem.squashfs" >/dev/null
+mkdir -p "$M/boot/grub" "$M/boot/efi"
+cp "$SRC/casper/vmlinuz" "$M/boot/vmlinuz"; cp "$SRC/casper/initrd" "$M/boot/initrd.img"
+RU=$(blkid -s UUID -o value "$RP"); EU=$(blkid -s UUID -o value "$EP")
+printf 'UUID=%s / ext4 defaults 0 1\nUUID=%s /boot/efi vfat umask=0077 0 2\n' "$RU" "$EU" > "$M/etc/fstab"
+echo "$HOSTN" > "$M/etc/hostname"
+rm -rf "$M/etc/systemd/system/getty@tty1.service.d" "$M/etc/casper.conf"
+chroot "$M" /bin/bash -c 'id nx >/dev/null 2>&1 && userdel -r nx || true'
+chroot "$M" useradd -m -s /bin/bash -G sudo "$USERN"
+printf '%s:%s\n' "$USERN" "$NX_PASSWORD" | chroot "$M" chpasswd
+{
+printf 'set timeout=5\nmenuentry "NX OS" {\n    search --no-floppy --fs-uuid --set=root %s\n    linux /boot/vmlinuz root=UUID=%s rw console=tty0 console=ttyS0,115200\n    initrd /boot/initrd.img\n}\n' "$RU" "$RU"
+if mdir -i "$EP" ::EFI/Microsoft/Boot/bootmgfw.efi >/dev/null 2>&1; then
+  printf 'menuentry "Windows" {\n    search --no-floppy --fs-uuid --set=root %s\n    chainloader /EFI/Microsoft/Boot/bootmgfw.efi\n}\n' "$EU"
+fi
+} > "$M/boot/grub/grub.cfg"
+printf 'search --no-floppy --fs-uuid --set=root %s\nconfigfile /boot/grub/grub.cfg\n' "$RU" > /var/tmp/nx-efi-embed.cfg
+grub-mkstandalone -O x86_64-efi --modules="part_gpt part_msdos ext2 fat ntfs normal search search_fs_uuid configfile linux chain" -o /var/tmp/grubx64.efi "boot/grub/grub.cfg=/var/tmp/nx-efi-embed.cfg"
+mmd -i "$EP" ::EFI/NX 2>/dev/null || true
+mcopy -D o -i "$EP" /var/tmp/grubx64.efi ::EFI/NX/grubx64.efi
+if [ -d /sys/firmware/efi/efivars ] && command -v efibootmgr >/dev/null; then
+  efibootmgr -c -d "$DISK" -p "$ESPN" -L "NX OS" -l '\EFI\NX\grubx64.efi' || echo "efibootmgr failed: add a boot entry for \\EFI\\NX\\grubx64.efi manually"
+else
+  echo "NOTE: not booted in UEFI mode here: add a firmware boot entry for \\EFI\\NX\\grubx64.efi on partition $ESPN."
+fi
+sync
+echo "== NX alongside install finished OK (root=$RP) =="
