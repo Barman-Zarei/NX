@@ -34,7 +34,9 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm || true
           ls -l /dev/kvm || echo "no KVM: tests fall back to slow TCG"
-      - run: sudo build/build-iso.sh
+      - name: Build ISO
+        run: sudo -E build/build-iso.sh
+        env: { DEBIAN_FRONTEND: noninteractive, DEBCONF_NONINTERACTIVE_SEEN: "true" }
       - run: sudo chmod -R a+r out && (cd out && sha256sum -c *.sha256)
       - run: tests/vm/boot-test.sh out/nx-os-*-amd64.iso 1500
       - run: tests/vm/boot-test-uefi.sh out/nx-os-*-amd64.iso 1500
@@ -58,7 +60,9 @@ jobs:
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm || true
-      - run: sudo NX_FLAVOR=desktop build/build-iso.sh
+      - name: Build desktop ISO
+        run: sudo -E NX_FLAVOR=desktop build/build-iso.sh
+        env: { DEBIAN_FRONTEND: noninteractive, DEBCONF_NONINTERACTIVE_SEEN: "true" }
       - name: Image content checks (chroot)
         run: |
           C=/var/tmp/nx-build/chroot
