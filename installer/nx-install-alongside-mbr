@@ -1,0 +1,81 @@
+#!/bin/bash
+# NX alongside installer for MBR + legacy BIOS disks (Windows 7 era layouts). LEGACY branch. EXPERIMENTAL.
+# Creates ONE new primary ext4 partition in free space and installs GRUB (i386-pc) into the disk's MBR boot code area.
+# NEVER touches existing partitions or the partition table. The existing MBR boot code (first 440 bytes) IS REPLACED by GRUB:
+# a backup is saved to <new root>/boot/nx-mbr-backup.bin and /var/tmp. Windows stays bootable through a GRUB chainload entry.
+# Restore Windows' own boot code: Windows 7 repair disc -> `bootrec /fixmbr`, or `dd if=nx-mbr-backup.bin of=/dev/X bs=440 count=1`.
+# Refuses: non-MBR disks, an extended partition present, 4 primary partitions, first partition starting before 1 MiB (no room for GRUB).
+set -euo pipefail
+usage() { echo "usage: nx-install-alongside-mbr --disk /dev/X --source <dir with casper/> --user NAME [--hostname H] [--size-mib N] --yes-i-am-sure DISK"; exit 2; }
+DISK=""; SRC=""; USERN=""; HOSTN="nx"; SIZE=0; CONFIRM=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --disk) DISK="$2"; shift 2;; --source) SRC="$2"; shift 2;; --user) USERN="$2"; shift 2;; --hostname) HOSTN="$2"; shift 2;;
+    --size-mib) SIZE="$2"; shift 2;; --yes-i-am-sure) CONFIRM="$2"; shift 2;; *) usage;;
+  esac
+done
+[ -n "$DISK" ] && [ -n "$SRC" ] && [ -n "$USERN" ] || usage
+[ "$(id -u)" -eq 0 ] || { echo "must run as root" >&2; exit 1; }
+[ -b "$DISK" ] || { echo "not a block device: $DISK" >&2; exit 1; }
+[[ "$USERN" =~ ^[a-z][a-z0-9_-]{0,30}$ ]] || { echo "invalid user name" >&2; exit 1; }
+[[ "$HOSTN" =~ ^[a-z0-9][a-z0-9-]{0,62}$ ]] || { echo "invalid hostname" >&2; exit 1; }
+[[ "$SIZE" =~ ^[0-9]+$ ]] || { echo "invalid --size-mib" >&2; exit 1; }
+[ -f "$SRC/casper/filesystem.squashfs" ] && [ -f "$SRC/casper/vmlinuz" ] && [ -f "$SRC/casper/initrd" ] || { echo "bad --source" >&2; exit 1; }
+[ -n "${NX_PASSWORD:-}" ] || { echo "set NX_PASSWORD in the environment" >&2; exit 1; }
+if lsblk -nr -o MOUNTPOINT "$DISK" | grep -q .; then echo "refusing: $DISK has mounted filesystems" >&2; exit 1; fi
+[ "$(blkid -p -o value -s PTTYPE "$DISK" 2>/dev/null)" = "dos" ] || { echo "refusing: needs an existing MBR (dos) partition table" >&2; exit 1; }
+P=""; case "$DISK" in *[0-9]) P="p";; esac
+PT=$(parted -sm "$DISK" unit MiB print free)
+PS=$(parted -sm "$DISK" unit s print)
+NPRIM=$(echo "$PS" | awk -F: '$1 ~ /^[1-4]$/ {n++} END{print n+0}')
+echo "$PS" | awk -F: '$1 ~ /^[0-9]+$/ && $5 ~ /extended/ {f=1} END{exit f?0:1}' && { echo "refusing: disk has an extended partition (not supported)" >&2; exit 1; }
+[ "$NPRIM" -lt 4 ] || { echo "refusing: 4 primary partitions already exist" >&2; exit 1; }
+MINSTART=$(echo "$PS" | awk -F: '$1 ~ /^[0-9]+$/ {gsub("s","",$2); if (m==""||$2+0<m) m=$2+0} END{print m+0}')
+[ "$MINSTART" -ge 2048 ] || { echo "refusing: first partition starts at sector $MINSTART (< 2048): no room for GRUB" >&2; exit 1; }
+BEST=$(echo "$PT" | awk -F: '$5 ~ /^free;?$/{gsub("MiB","",$2);gsub("MiB","",$3);gsub("MiB","",$4); print $4, $2, $3}' | sort -rn | head -n1)
+read -r FSIZE FSTART FEND <<< "$BEST"
+FSIZE=${FSIZE%.*}; FSTART=${FSTART%.*}; FEND=${FEND%.*}
+[ "${FSIZE:-0}" -ge 4096 ] || { echo "refusing: need >= 4096 MiB contiguous free space (largest: ${FSIZE:-0} MiB)" >&2; exit 1; }
+START=$((FSTART + 1)); END=$FEND; [ "$SIZE" -gt 0 ] && [ "$SIZE" -lt $((FSIZE - 2)) ] && END=$((START + SIZE))
+echo "Disk: $DISK ($(lsblk -dn -o SIZE "$DISK")), MBR, $NPRIM primary partition(s)"
+echo "Plan: create ONE primary partition ${START}MiB-${END}MiB (ext4); install GRUB boot code into the MBR (backup kept); partitions untouched."
+[ "$CONFIRM" = "$DISK" ] || { echo "refusing: re-run with --yes-i-am-sure $DISK to apply the plan above" >&2; exit 1; }
+LOG=/var/log/nx-install.log; exec > >(tee -a "$LOG") 2>&1
+M=/mnt/nx-target; mkdir -p "$M"; trap 'umount -R "$M" 2>/dev/null || true' EXIT
+BEFORE=$(parted -sm "$DISK" print | awk -F: '$1 ~ /^[0-9]+$/{print $1}' | sort)
+dd if="$DISK" of="/var/tmp/nx-mbr-backup.bin" bs=512 count=1 2>/dev/null
+parted -s "$DISK" mkpart primary ext4 "${START}MiB" "${END}MiB"
+command -v udevadm >/dev/null && udevadm settle || true; sleep 1
+AFTER=$(parted -sm "$DISK" print | awk -F: '$1 ~ /^[0-9]+$/{print $1}' | sort)
+NEWN=$(comm -13 <(echo "$BEFORE") <(echo "$AFTER") | head -n1)
+[ -n "$NEWN" ] || { echo "could not identify the new partition" >&2; exit 1; }
+RP="${DISK}${P}${NEWN}"
+mkfs.ext4 -q -F -L nx-root "$RP"
+mount "$RP" "$M"
+unsquashfs -f -d "$M" "$SRC/casper/filesystem.squashfs" >/dev/null
+mkdir -p "$M/boot/grub"
+cp "$SRC/casper/vmlinuz" "$M/boot/vmlinuz"; cp "$SRC/casper/initrd" "$M/boot/initrd.img"
+cp /var/tmp/nx-mbr-backup.bin "$M/boot/nx-mbr-backup.bin"
+RU=$(blkid -s UUID -o value "$RP")
+printf 'UUID=%s / ext4 defaults 0 1\n' "$RU" > "$M/etc/fstab"
+echo "$HOSTN" > "$M/etc/hostname"
+rm -rf "$M/etc/systemd/system/getty@tty1.service.d" "$M/etc/casper.conf" "$M/etc/lightdm/lightdm.conf.d/50-nx-live.conf"
+chroot "$M" /bin/bash -c 'id nx >/dev/null 2>&1 && userdel -r nx || true'
+chroot "$M" useradd -m -s /bin/bash -G sudo "$USERN"
+printf '%s:%s\n' "$USERN" "$NX_PASSWORD" | chroot "$M" chpasswd
+{
+printf 'insmod part_msdos\ninsmod ext2\ninsmod ntfs\ninsmod chain\ninsmod search_fs_uuid\nset timeout=5\nset default=0\n'
+printf 'menuentry "NX OS" {\n    search --no-floppy --fs-uuid --set=root %s\n    linux /boot/vmlinuz root=UUID=%s rw console=tty0 console=ttyS0,115200\n    initrd /boot/initrd.img\n}\n' "$RU" "$RU"
+# Windows entry: the NTFS partition that carries the boot (active) flag, e.g. Windows 7 "System Reserved"
+WN=$(echo "$AFTER" | while read -r n; do [ "$n" = "$NEWN" ] && continue; parted -sm "$DISK" print | awk -F: -v n="$n" '$1==n && $7 ~ /(^|[, ])boot(,|;|$)/ {print n}'; done | head -n1)
+if [ -n "${WN:-}" ]; then
+  WU=$(blkid -s UUID -o value "${DISK}${P}${WN}" 2>/dev/null || true)
+  if [ -n "$WU" ]; then
+    printf 'menuentry "Windows (boot partition %s)" {\n    search --no-floppy --fs-uuid --set=root %s\n    chainloader +1\n}\n' "$WN" "$WU"
+  fi
+fi
+} > "$M/boot/grub/grub.cfg"
+grub-install --target=i386-pc --boot-directory="$M/boot" "$DISK"
+sync
+echo "MBR boot code backup: /var/tmp/nx-mbr-backup.bin and /boot/nx-mbr-backup.bin on the NX partition"
+echo "== NX alongside (MBR/BIOS) install finished OK (root=$RP) =="

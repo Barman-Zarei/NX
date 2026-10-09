@@ -1,0 +1,7 @@
+# Alongside install on MBR + legacy BIOS disks (LEGACY branch; Windows 7 era layouts)
+    sudo NX_PASSWORD='...' installer/nx-install-alongside-mbr --disk /dev/sdX --source <dir with casper/> --user NAME [--size-mib N] --yes-i-am-sure /dev/sdX
+Without `--yes-i-am-sure` it only prints the plan. Requirements: MBR (dos) disk, <= 3 primary partitions and no extended partition, >= 4096 MiB contiguous free space, first partition starting at >= 1 MiB (sector 2048; Windows 7 default; old XP-style layouts starting at sector 63 are refused).
+What it changes: ONE new primary ext4 partition, and **GRUB replaces the boot code in the first 440 bytes of the MBR**. The partition table and every existing partition stay byte-identical (tested on a simulated Windows layout). A backup of the original MBR is stored as `nx-mbr-backup.bin` on the NX partition and in /var/tmp. Windows remains bootable through a GRUB menu entry that chainloads its active (boot) partition ("System Reserved" on Windows 7).
+Free space must already exist: shrink C: in Windows Disk Management first (back up data). NX does not resize NTFS.
+Restore Windows' own boot code: Windows 7 repair disc -> Command Prompt -> `bootrec /fixmbr` (then `bootrec /fixboot`, `bootrec /rebuildbcd`), or `dd if=nx-mbr-backup.bin of=/dev/sdX bs=440 count=1` from a live system.
+Tested only on loop-device images in QEMU (simulated Windows: two NTFS partitions with a "boot" flag, random boot code) - see STATUS.md. NOT tested with a real Windows 7 installation, BitLocker (n/a on Windows 7), real disks or real firmware.

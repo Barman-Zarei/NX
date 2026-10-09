@@ -1,10 +1,10 @@
 #!/bin/bash
-# Installer tests (root, loop devices, QEMU, OVMF). usage: sudo tests/vm/test-installers.sh file.iso [empty|alongside|all]
+# Installer tests (root, loop devices, QEMU, OVMF). usage: sudo tests/vm/test-installers.sh file.iso [empty|alongside|mbr|all]
 # empty:     install onto an empty 3 GiB image; refusal on non-empty disk; boot BIOS, UEFI, UEFI+Secure Boot (MS keys).
 # alongside: fake-Windows GPT disk (ESP + NTFS + free space); existing partitions must stay byte-identical; Secure Boot boot.
 #            The firmware boot entry is SIMULATED by copying EFI/NX/* to EFI/BOOT in a test copy (no NVRAM in a VM).
 set -uo pipefail
-ISO="${1:?usage: test-installers.sh file.iso [empty|alongside|all]}"; WHICH="${2:-all}"; T="${NX_BOOT_TIMEOUT:-900}"
+ISO="${1:?usage: test-installers.sh file.iso [empty|alongside|mbr|all]}"; WHICH="${2:-all}"; T="${NX_BOOT_TIMEOUT:-900}"
 HERE="$(cd "$(dirname "$0")/../.." && pwd)"; W="$(mktemp -d /var/tmp/nxtest.XXXXXX)"; FAIL=0
 ACCEL=tcg; [ -w /dev/kvm ] && ACCEL=kvm
 export NX_PASSWORD=ci-test-password
@@ -73,7 +73,31 @@ test_alongside() {
   boot_check "$img" secboot
 }
 
-case "$WHICH" in empty) test_empty;; alongside) test_alongside;; all) test_empty; test_alongside;; *) echo "bad selector"; exit 2;; esac
+test_mbr() {
+  local img="$W/mbr.img" ld ok; truncate -s 8G "$img"; ld="$(losetup -fP --show "$img")"; sleep 1
+  parted -s "$ld" mklabel msdos; parted -s "$ld" mkpart primary ntfs 1MiB 101MiB; parted -s "$ld" set 1 boot on
+  parted -s "$ld" mkpart primary ntfs 101MiB 3GiB; sleep 1
+  mkntfs -F -Q -L SystemReserved "${ld}p1" > /dev/null 2>&1; mkntfs -F -Q -L Windows "${ld}p2" > /dev/null 2>&1
+  head -c 440 /dev/urandom > "$W/fake-boot-code.bin"; dd if="$W/fake-boot-code.bin" of="$ld" bs=440 count=1 conv=notrunc 2> /dev/null   # simulated Windows MBR boot code
+  head -c 3145728 /dev/urandom | dd of="${ld}p2" bs=1M seek=100 conv=notrunc 2> /dev/null
+  sha256sum "${ld}p1" | cut -c1-64 > "$W/m1.before"; sha256sum "${ld}p2" | cut -c1-64 > "$W/m2.before"
+  dd if="$ld" bs=1 skip=440 count=38 2> /dev/null | sha256sum | cut -c1-64 > "$W/mtab.before"   # disk signature + partition entries 1-2
+  if "$HERE/installer/nx-install-alongside-mbr" --disk "$ld" --source "$W/src" --user cituser --size-mib 3500 > "$W/mbr-plan.log" 2>&1; then fail "mbr installer ran without --yes-i-am-sure"; else pass "mbr installer refuses without explicit confirmation"; fi
+  if "$HERE/installer/nx-install-alongside-mbr" --disk "$ld" --source "$W/src" --user cituser --size-mib 3500 --yes-i-am-sure "$ld" > "$W/mbr-install.log" 2>&1; then pass "mbr alongside install"; else fail "mbr alongside install"; tail -5 "$W/mbr-install.log"; fi
+  sync
+  ok=YES; sha256sum "${ld}p1" | cut -c1-64 | diff -q - "$W/m1.before" > /dev/null || ok=NO; [ $ok = YES ] && pass "MBR: partition 1 byte-identical" || fail "MBR: partition 1 changed"
+  ok=YES; sha256sum "${ld}p2" | cut -c1-64 | diff -q - "$W/m2.before" > /dev/null || ok=NO; [ $ok = YES ] && pass "MBR: Windows partition byte-identical" || fail "MBR: Windows partition changed"
+  ok=YES; dd if="$ld" bs=1 skip=440 count=38 2> /dev/null | sha256sum | cut -c1-64 | diff -q - "$W/mtab.before" > /dev/null || ok=NO
+  [ $ok = YES ] && pass "MBR: disk signature and existing partition entries unchanged" || fail "MBR: partition table entries changed"
+  debugfs -R "dump /boot/nx-mbr-backup.bin $W/backup.bin" "${ld}p3" > /dev/null 2>&1
+  ok=YES; head -c 440 "$W/backup.bin" | cmp -s - "$W/fake-boot-code.bin" || ok=NO; [ $ok = YES ] && pass "original MBR boot code backed up" || fail "MBR boot code backup missing/different"
+  ok=YES; [ "$(dd if="$ld" bs=1 skip=0 count=440 2> /dev/null | cmp -s - "$W/fake-boot-code.bin" && echo same)" != same ] || ok=NO; [ $ok = YES ] && pass "GRUB boot code now in MBR" || fail "MBR boot code not replaced"
+  debugfs -R "cat /boot/grub/grub.cfg" "${ld}p3" 2> /dev/null | grep -q 'chainloader +1' && pass "grub.cfg has Windows chainload entry" || fail "no Windows chainload entry"
+  losetup -d "$ld"
+  boot_check "$img" bios
+}
+
+case "$WHICH" in empty) test_empty;; alongside) test_alongside;; mbr) test_mbr;; all) test_empty; test_alongside; test_mbr;; *) echo "bad selector"; exit 2;; esac
 [ -n "${NX_LOG_DIR:-}" ] && { mkdir -p "$NX_LOG_DIR"; cp "$W"/*.log "$NX_LOG_DIR"/ 2> /dev/null; }
 [ "$FAIL" -eq 0 ] && echo "ALL INSTALLER TESTS PASSED" || echo "SOME INSTALLER TESTS FAILED"
 exit "$FAIL"

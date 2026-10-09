@@ -74,3 +74,8 @@
 - Desktop flavor `NX_FLAVOR=desktop`: XFCE + lightdm, Calamares + `/etc/calamares` config (settings, unpackfs, partition, bootloader, users, shellprocess, NX branding), os-prober, Brok cloned to `/opt/brok` (license + NOTICE kept), `nx-ai`, Software Center GUI, NX wallpaper/dark theme setup script, polkit/pkexec. CI job `desktop-flavor` checks image contents, boots with a virtual display and fails if the last screenshot is blank. It does NOT run a Calamares installation: that needs a manual run (Calamares path is not Secure Boot capable; the CLI installers are).
 - `release.yml`: build, boot and installer tests, package manifest, SHA256SUMS, detached GPG signature from repository secrets, pre-release vs stable by tag. Requires the maintainer to create the GPG key and secrets.
 - Not started: ARM64, local-model (Ollama) test, voice, PolicyKit action files for NX tools, Windows .exe packaging, update channel/APT repo.
+
+## LEGACY branch (2026-10-09)
+- Ran here: new `installer/nx-install-alongside-mbr` + `tests/vm/test-installers.sh mbr`: all PASS on a simulated Windows 7 disk (MBR, two NTFS partitions, boot flag, random boot code): confirmation refusal, install, existing partitions + partition entries byte-identical, original boot code backed up, GRUB in MBR, Windows chainload entry present, BIOS boot to login (QEMU/TCG). Unit tests for the PE checker pass on Linux.
+- Written, NOT yet run (CI on GitHub will): Windows jobs (x64/x86: tests, PyInstaller builds, smoke tests, static Win7 PE check), Wine-as-Windows-7 proxy job, ISO + installer tests incl. MBR.
+- Requires a human: `windows/win7-smoke-test.bat` on a real Windows 7 SP1 machine. No Windows 7 verification exists.

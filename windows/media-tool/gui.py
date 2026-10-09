@@ -49,6 +49,13 @@ class VerifyWindow(QWidget):
 
 
 def main():
+    if len(sys.argv) >= 3 and sys.argv[1] == "--selftest":   # headless smoke test used by CI: builds the window, writes a marker file
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        app = QApplication(sys.argv)
+        w = VerifyWindow(); w.show(); app.processEvents()
+        with open(sys.argv[2], "w") as f:
+            f.write("selftest-ok\n")
+        return 0
     app = QApplication(sys.argv)
     w = VerifyWindow(); w.show()
     return app.exec_()
