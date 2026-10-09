@@ -18,6 +18,10 @@ jobs:
       - run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm || true
+      - name: Make dpkg non-interactive (keep existing conffiles, e.g. casper.conf)
+        run: |
+          sed -i 's/apt-get install -y /apt-get install -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold /' build/build-iso.sh
+          grep -q 'force-confold' build/build-iso.sh
       - name: Build ISO
         run: sudo -E NX_VERSION="${GITHUB_REF_NAME#v}" build/build-iso.sh
         env: { DEBIAN_FRONTEND: noninteractive, DEBCONF_NONINTERACTIVE_SEEN: "true" }

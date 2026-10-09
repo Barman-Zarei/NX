@@ -4,8 +4,11 @@ on: [push, pull_request, workflow_dispatch]
 jobs:
   lint-unit:
     runs-on: ubuntu-24.04
+    env: { NX_BROK_DIR: /tmp/Brok }
     steps:
       - uses: actions/checkout@v4
+      - name: Get real Brok (adapter tests need it)
+        run: git clone --depth 1 https://github.com/Barman-Zarei/Brok /tmp/Brok
       - run: sudo apt-get update && sudo apt-get install -y shellcheck libegl1 libgl1 libxkbcommon0 libfontconfig1 libglib2.0-0 python3-gi gir1.2-gtk-3.0 xvfb
       - run: shellcheck -S warning build/build-iso.sh installer/nx-install installer/nx-install-alongside tests/vm/*.sh
       - name: Unit tests (Python 3.12)
@@ -13,8 +16,7 @@ jobs:
       - run: python3 compatibility/validate.py
       - name: Brok adapter tests against real Brok (runner is non-root)
         run: |
-          git clone --depth 1 https://github.com/Barman-Zarei/Brok /tmp/Brok
-          NX_BROK_DIR=/tmp/Brok python3 -m unittest tests.unit.test_brok_adapter -v
+          python3 -m unittest tests.unit.test_brok_adapter -v
       - name: Windows-tool GUI on Python 3.12 + PySide6 (offscreen)
         run: |
           pip install uv && uv venv --python 3.12 /tmp/v312 && uv pip install --python /tmp/v312/bin/python PySide6-Essentials
@@ -34,6 +36,10 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm || true
           ls -l /dev/kvm || echo "no KVM: tests fall back to slow TCG"
+      - name: Make dpkg non-interactive (keep existing conffiles, e.g. casper.conf)
+        run: |
+          sed -i 's/apt-get install -y /apt-get install -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold /' build/build-iso.sh
+          grep -q 'force-confold' build/build-iso.sh
       - name: Build ISO
         run: sudo -E build/build-iso.sh
         env: { DEBIAN_FRONTEND: noninteractive, DEBCONF_NONINTERACTIVE_SEEN: "true" }
@@ -60,6 +66,10 @@ jobs:
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm || true
+      - name: Make dpkg non-interactive (keep existing conffiles, e.g. casper.conf)
+        run: |
+          sed -i 's/apt-get install -y /apt-get install -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold /' build/build-iso.sh
+          grep -q 'force-confold' build/build-iso.sh
       - name: Build desktop ISO
         run: sudo -E NX_FLAVOR=desktop build/build-iso.sh
         env: { DEBIAN_FRONTEND: noninteractive, DEBCONF_NONINTERACTIVE_SEEN: "true" }
