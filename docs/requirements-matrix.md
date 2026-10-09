@@ -3,7 +3,7 @@
 |---|---|---|---|---|---|
 | NX-BOOT-1 | Bootable live ISO (BIOS) | Tested (QEMU/TCG, reached login) | build/build-iso.sh | tests/vm/boot-test.sh | no real hardware, no KVM |
 | NX-BOOT-2 | UEFI boot | Tested (OVMF/TCG, reached login) | tests/vm/boot-test-uefi.sh | OVMF/TCG | Secure Boot not supported |
-| NX-INST-1 | Empty-disk install | Planned | installer/calamares (scaffold) | none | not in ISO |
+| NX-INST-1 | Empty-disk install (CLI) | Tested on loop image, BIOS+UEFI boot to login | installer/nx-install | tests/vm/boot-disk-test.sh | no physical disk; GUI installer (Calamares) is scaffold only |
 | NX-INST-2 | Dual boot with Windows | Planned | - | none | - |
 | NX-AI-1 | Safe tool broker | Implemented + unit tested (8 tests) | ai/service/broker.py | tests/unit/test_broker.py | no Brok, no PolicyKit yet |
 | NX-AI-2 | Brok adapter | Planned | - | none | Brok is Qt6/Python, not yet inspected in depth |

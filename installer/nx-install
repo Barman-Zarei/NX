@@ -1,0 +1,63 @@
+#!/bin/bash
+# NX CLI installer (Milestone 2, experimental). Installs the live image's squashfs onto an EMPTY or explicitly-erased disk.
+# Layout (GPT): 1 MiB bios_grub | 256 MiB ESP (FAT32) | rest ext4 root. Supports BIOS and UEFI (removable path) boot.
+# Safety: refuses a disk that is mounted or has any partition table unless --erase AND the typed confirmation matches the disk path.
+# Never resizes existing partitions. No dual-boot support yet.
+set -euo pipefail
+usage() { echo "usage: nx-install --disk /dev/X --source <dir with casper/> --user NAME [--hostname H] [--erase] [--yes-i-am-sure DISK]"; exit 2; }
+DISK=""; SRC=""; USERN=""; HOSTN="nx"; ERASE=0; CONFIRM=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --disk) DISK="$2"; shift 2;; --source) SRC="$2"; shift 2;; --user) USERN="$2"; shift 2;;
+    --hostname) HOSTN="$2"; shift 2;; --erase) ERASE=1; shift;; --yes-i-am-sure) CONFIRM="$2"; shift 2;; *) usage;;
+  esac
+done
+[ -n "$DISK" ] && [ -n "$SRC" ] && [ -n "$USERN" ] || usage
+[ "$(id -u)" -eq 0 ] || { echo "must run as root" >&2; exit 1; }
+[ -b "$DISK" ] || { echo "not a block device: $DISK" >&2; exit 1; }
+[[ "$USERN" =~ ^[a-z][a-z0-9_-]{0,30}$ ]] || { echo "invalid user name" >&2; exit 1; }
+[[ "$HOSTN" =~ ^[a-z0-9][a-z0-9-]{0,62}$ ]] || { echo "invalid hostname" >&2; exit 1; }
+[ -f "$SRC/casper/filesystem.squashfs" ] && [ -f "$SRC/casper/vmlinuz" ] && [ -f "$SRC/casper/initrd" ] || { echo "bad --source" >&2; exit 1; }
+[ -n "${NX_PASSWORD:-}" ] || { echo "set NX_PASSWORD in the environment" >&2; exit 1; }
+if lsblk -nr -o MOUNTPOINT "$DISK" | grep -q .; then echo "refusing: $DISK has mounted filesystems" >&2; exit 1; fi
+NPART=$(lsblk -nr -o TYPE "$DISK" | grep -c '^part$' || true)
+echo "Target: $DISK ($(lsblk -dn -o SIZE "$DISK")), existing partitions: $NPART"
+if [ "$NPART" -gt 0 ] || [ -n "$(blkid -p -o value -s PTTYPE "$DISK" 2>/dev/null)" ]; then
+  [ "$ERASE" -eq 1 ] && [ "$CONFIRM" = "$DISK" ] || { echo "refusing: disk is not empty. Re-run with --erase --yes-i-am-sure $DISK to DESTROY ALL DATA on it." >&2; exit 1; }
+fi
+LOG=/var/log/nx-install.log; exec > >(tee -a "$LOG") 2>&1
+echo "== NX install $(date -u +%FT%TZ) =="
+P=""; case "$DISK" in *[0-9]) P="p";; esac
+M=/mnt/nx-target; mkdir -p "$M"
+cleanup() { umount -R "$M" 2>/dev/null || true; }
+trap cleanup EXIT
+parted -s "$DISK" mklabel gpt mkpart bios 1MiB 2MiB set 1 bios_grub on mkpart esp fat32 2MiB 258MiB set 2 esp on mkpart root ext4 258MiB 100%
+command -v udevadm >/dev/null && udevadm settle || true; sleep 1
+mkfs.vfat -F32 -n NXEFI "${DISK}${P}2" >/dev/null
+mkfs.ext4 -q -F -L nx-root "${DISK}${P}3"
+mount "${DISK}${P}3" "$M"; mkdir -p "$M/boot/efi"  # ESP is filled with mtools (no vfat mount needed)
+unsquashfs -f -d "$M" "$SRC/casper/filesystem.squashfs" >/dev/null
+mkdir -p "$M/boot"; cp "$SRC/casper/vmlinuz" "$M/boot/vmlinuz"; cp "$SRC/casper/initrd" "$M/boot/initrd.img"
+RU=$(blkid -s UUID -o value "${DISK}${P}3"); EU=$(blkid -s UUID -o value "${DISK}${P}2")
+printf 'UUID=%s / ext4 defaults 0 1\nUUID=%s /boot/efi vfat umask=0077 0 2\n' "$RU" "$EU" > "$M/etc/fstab"
+echo "$HOSTN" > "$M/etc/hostname"
+rm -rf "$M/etc/systemd/system/getty@tty1.service.d" "$M/etc/casper.conf"
+chroot "$M" /bin/bash -c 'id nx >/dev/null 2>&1 && userdel -r nx || true'
+chroot "$M" useradd -m -s /bin/bash -G sudo "$USERN"
+printf '%s:%s\n' "$USERN" "$NX_PASSWORD" | chroot "$M" chpasswd
+mkdir -p "$M/boot/grub"
+cat > "$M/boot/grub/grub.cfg" <<EOL
+set timeout=3
+menuentry "NX OS" {
+    search --no-floppy --fs-uuid --set=root $RU
+    linux /boot/vmlinuz root=UUID=$RU rw console=tty0 console=ttyS0,115200
+    initrd /boot/initrd.img
+}
+EOL
+grub-install --target=i386-pc --boot-directory="$M/boot" "$DISK"
+printf 'search --no-floppy --fs-uuid --set=root %s\nconfigfile /boot/grub/grub.cfg\n' "$RU" > /var/tmp/nx-efi-embed.cfg
+grub-mkstandalone -O x86_64-efi --modules="part_gpt part_msdos ext2 fat normal search search_fs_uuid configfile linux" -o /var/tmp/BOOTX64.EFI "boot/grub/grub.cfg=/var/tmp/nx-efi-embed.cfg"
+mmd -i "${DISK}${P}2" ::EFI ::EFI/BOOT
+mcopy -i "${DISK}${P}2" /var/tmp/BOOTX64.EFI ::EFI/BOOT/BOOTX64.EFI
+sync
+echo "== NX install finished OK =="

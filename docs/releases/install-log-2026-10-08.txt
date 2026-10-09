@@ -1,0 +1,18 @@
+Target: /dev/loop0 (  3G), existing partitions: 0
+== NX install 2026-10-09T04:19:27Z ==
+sh: 1: udevadm: not found
+sh: 1: udevadm: not found
+sh: 1: udevadm: not found
+sh: 1: udevadm: not found
+sh: 1: udevadm: not found
+sh: 1: udevadm: not found
+sh: 1: udevadm: not found
+sh: 1: udevadm: not found
+sh: 1: udevadm: not found
+sh: 1: udevadm: not found
+sh: 1: udevadm: not found
+sh: 1: udevadm: not found
+userdel: nx mail spool (/var/mail/nx) not found
+Installing for i386-pc platform.
+Installation finished. No error reported.
+Could not get geometry of device (Inappropriate ioctl for device)Could not get geometry of device (Inappropriate ioctl for device)== NX install finished OK ==

@@ -14,6 +14,9 @@ Copyright (c) 2026 Barman. See `LICENSES.md`.
 - `tests/` – unit tests and VM boot tests
 - `docs/` – architecture, installation, compatibility, security, releases
 
+## Install (experimental, VM-tested only)
+See `docs/installation/empty-disk.md`.
+
 ## Build (needs root on Ubuntu 24.04)
     sudo apt install debootstrap xorriso squashfs-tools grub-pc-bin grub-efi-amd64-bin mtools qemu-system-x86
     sudo build/build-iso.sh          # produces out/nx-os-<version>-amd64.iso + .sha256
