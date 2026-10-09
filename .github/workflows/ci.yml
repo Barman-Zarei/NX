@@ -88,7 +88,9 @@ jobs:
       - run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm || true
-      - run: sudo build/build-iso.sh
+      - name: Build ISO
+        run: sudo -E build/build-iso.sh
+        env: { DEBIAN_FRONTEND: noninteractive, DEBCONF_NONINTERACTIVE_SEEN: "true" }
       - run: sudo chmod -R a+r out && (cd out && sha256sum -c *.sha256)
       - run: tests/vm/boot-test.sh out/nx-os-*-amd64.iso 1500 && tests/vm/boot-test-uefi.sh out/nx-os-*-amd64.iso 1500
       - name: Installer tests incl. MBR/BIOS alongside install (Windows 7 style disk)
