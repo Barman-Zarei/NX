@@ -6,8 +6,11 @@ on: [push, pull_request, workflow_dispatch]
 jobs:
   lint-unit:
     runs-on: ubuntu-24.04
+    env: { NX_BROK_DIR: /tmp/Brok }
     steps:
       - uses: actions/checkout@v4
+      - name: Get real Brok (adapter tests need it)
+        run: git clone --depth 1 https://github.com/Barman-Zarei/Brok /tmp/Brok
       - run: sudo apt-get update && sudo apt-get install -y shellcheck libegl1 libgl1 libxkbcommon0 libfontconfig1 libglib2.0-0 python3-gi gir1.2-gtk-3.0 xvfb
       - run: shellcheck -S warning build/build-iso.sh installer/nx-install installer/nx-install-alongside installer/nx-install-alongside-mbr tests/vm/*.sh
       - run: xvfb-run -a python3 -m unittest discover -s tests/unit -p 'test_*.py'
@@ -88,6 +91,10 @@ jobs:
       - run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm || true
+      - name: Make dpkg non-interactive (keep existing conffiles, e.g. casper.conf)
+        run: |
+          sed -i 's/apt-get install -y /apt-get install -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold /' build/build-iso.sh
+          grep -q 'force-confold' build/build-iso.sh
       - name: Build ISO
         run: sudo -E build/build-iso.sh
         env: { DEBIAN_FRONTEND: noninteractive, DEBCONF_NONINTERACTIVE_SEEN: "true" }
