@@ -31,7 +31,8 @@ chroot "$CH" /bin/bash -euxc '
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y --no-install-recommends linux-image-virtual casper initramfs-tools systemd-sysv \
-  network-manager sudo less nano iproute2 ca-certificates locales
+  network-manager sudo less nano iproute2 ca-certificates locales \
+  parted dosfstools mtools e2fsprogs squashfs-tools grub-pc-bin grub-efi-amd64-bin grub-efi-amd64-signed shim-signed efibootmgr gdisk
 useradd -m -s /bin/bash -G sudo nx || true
 echo "nx:nx" | chpasswd
 mkdir -p /etc/systemd/system/getty@tty1.service.d

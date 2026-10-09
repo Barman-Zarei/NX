@@ -62,13 +62,24 @@ if mdir -i "$EP" ::EFI/Microsoft/Boot/bootmgfw.efi >/dev/null 2>&1; then
 fi
 } > "$M/boot/grub/grub.cfg"
 printf 'search --no-floppy --fs-uuid --set=root %s\nconfigfile /boot/grub/grub.cfg\n' "$RU" > /var/tmp/nx-efi-embed.cfg
-grub-mkstandalone -O x86_64-efi --modules="part_gpt part_msdos ext2 fat ntfs normal search search_fs_uuid configfile linux chain" -o /var/tmp/grubx64.efi "boot/grub/grub.cfg=/var/tmp/nx-efi-embed.cfg"
 mmd -i "$EP" ::EFI/NX 2>/dev/null || true
-mcopy -D o -i "$EP" /var/tmp/grubx64.efi ::EFI/NX/grubx64.efi
-if [ -d /sys/firmware/efi/efivars ] && command -v efibootmgr >/dev/null; then
-  efibootmgr -c -d "$DISK" -p "$ESPN" -L "NX OS" -l '\EFI\NX\grubx64.efi' || echo "efibootmgr failed: add a boot entry for \\EFI\\NX\\grubx64.efi manually"
+if [ -f /usr/lib/shim/shimx64.efi.signed ] && [ -f /usr/lib/grub/x86_64-efi-signed/grubx64.efi.signed ]; then
+  echo "EFI: Secure Boot capable chain (signed shim + signed grub) in EFI/NX"
+  mcopy -D o -i "$EP" /usr/lib/shim/shimx64.efi.signed ::EFI/NX/shimx64.efi
+  mcopy -D o -i "$EP" /usr/lib/grub/x86_64-efi-signed/grubx64.efi.signed ::EFI/NX/grubx64.efi
+  [ -f /usr/lib/shim/mmx64.efi.signed ] && mcopy -D o -i "$EP" /usr/lib/shim/mmx64.efi.signed ::EFI/NX/mmx64.efi
+  mcopy -D o -i "$EP" /var/tmp/nx-efi-embed.cfg ::EFI/NX/grub.cfg
+  LOADER='\EFI\NX\shimx64.efi'
 else
-  echo "NOTE: not booted in UEFI mode here: add a firmware boot entry for \\EFI\\NX\\grubx64.efi on partition $ESPN."
+  echo "WARNING: signed shim/grub not installed: using UNSIGNED grub (Secure Boot will not work)"
+  grub-mkstandalone -O x86_64-efi --modules="part_gpt part_msdos ext2 fat ntfs normal search search_fs_uuid configfile linux chain" -o /var/tmp/grubx64.efi "boot/grub/grub.cfg=/var/tmp/nx-efi-embed.cfg"
+  mcopy -D o -i "$EP" /var/tmp/grubx64.efi ::EFI/NX/grubx64.efi
+  LOADER='\EFI\NX\grubx64.efi'
+fi
+if [ -d /sys/firmware/efi/efivars ] && command -v efibootmgr >/dev/null; then
+  efibootmgr -c -d "$DISK" -p "$ESPN" -L "NX OS" -l "$LOADER" || echo "efibootmgr failed: add a boot entry for $LOADER manually"
+else
+  echo "NOTE: not booted in UEFI mode here: add a firmware boot entry for $LOADER on partition $ESPN."
 fi
 sync
 echo "== NX alongside install finished OK (root=$RP) =="

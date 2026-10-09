@@ -9,7 +9,7 @@ Copyright (c) 2026 Barman. See `LICENSES.md`.
 
 ## Layout
 - `build/` – reproducible ISO build (`build/build-iso.sh`), config
-- `windows/media-tool/` – Windows 7+ companion (Qt 5.15 / PySide2 on Python 3.8): ISO checksum verification (GUI is scaffolding)
+- `windows/media-tool/` – Windows 7+ companion (Qt 5.15 / PySide2 on Python 3.8): ISO checksum verification
 - `ai/brok-adapter/` – planned Brok integration (not started)
 - `tests/` – unit tests and VM boot tests
 - `docs/` – architecture, installation, compatibility, security, releases

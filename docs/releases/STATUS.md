@@ -49,3 +49,15 @@
 - UEFI/OVMF/TCG boot of that disk reached `nx login:`, **but only after I copied `grubx64.efi` to `EFI/BOOT/BOOTX64.EFI` in a test copy** to simulate a firmware boot entry (no NVRAM entry could be created in the VM).
 **Not verified:** real Windows (chainload entry only checked as text; bootmgfw.efi is a dummy), efibootmgr path, BitLocker, Secure Boot, MBR/BIOS, real disks, repeat installs.
 - `.github/workflows/ci.yml` rewritten (lint, unit tests, ISO build, BIOS+UEFI boot tests); never run on GitHub.
+
+## Session 1, Secure Boot, Python 3.8 GUI, Software Center (2026-10-09)
+**Secure Boot (QEMU/OVMF with Microsoft keys pre-enrolled, `OVMF_CODE_4M.secboot.fd`, TCG)**
+- Chain: Ubuntu-signed shim -> Ubuntu-signed GRUB -> Ubuntu-signed kernel. Boot log showed "UEFI Secure Boot is enabled", "secureboot: Secure boot enabled", kernel lockdown; reached `nx login:`.
+- `build-iso.sh` now adds shim-signed/grub-efi-amd64-signed/parted/mtools etc. to the image; ISO rebuilt (168 MB). Empty-disk install from that ISO (installer picks signed shim+grub when present, else warns and falls back to unsigned GRUB) booted under Secure Boot: PASS.
+- Alongside install with the signed chain on a fake-Windows disk: NTFS hash and partition rows unchanged, EFI/BOOT not created, EFI/NX files present; Secure Boot boot PASS **after copying EFI/NX/* into EFI/BOOT in a test copy** (simulating a firmware boot entry).
+- Not verified: real firmware, real Windows, efibootmgr entry creation, custom-signed kernels/modules (MOK), disk encryption, Secure Boot on legacy BIOS (n/a). Signed binaries are Canonical's/Microsoft's: NX has no signing keys of its own.
+**Windows 7 media tool**
+- Python 3.8.20 (via uv, python-build-standalone) + PySide2 5.15.2.1 installed on Linux; all unit tests run on 3.8 and the GUI window logic passed headless (`QT_QPA_PLATFORM=offscreen`). Never run on Windows 7 or Windows at all; no .exe built; USB writing not implemented.
+**Software Center core** (`software-center/nxsoft.py`): search/info over apt-cache (real call checked), install/remove preview + approval gate, name validation, compatibility record lookup. 6 unit tests pass. No GUI, no Flatpak/AppImage/Wine integration, no actual install performed.
+**Dropped by the maintainer's decision:** 32-bit (i386) edition.
+**Still not built:** NX desktop (login, shell, settings, file manager), graphical installer (Calamares), Brok inside the ISO / local-model test, voice, PolicyKit integration, ARM64, physical-hardware tests, update channels, signed NX releases.

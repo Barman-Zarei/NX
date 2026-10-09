@@ -93,19 +93,17 @@ if [ "$ALONG" -eq 0 ]; then
   grub-install --target=i386-pc --boot-directory="$M/boot" "$DISK"
 fi
 printf 'search --no-floppy --fs-uuid --set=root %s\nconfigfile /boot/grub/grub.cfg\n' "$RU" > /var/tmp/nx-efi-embed.cfg
-grub-mkstandalone -O x86_64-efi --modules="part_gpt part_msdos ext2 fat normal search search_fs_uuid configfile linux chain" -o /var/tmp/BOOTX64.EFI "boot/grub/grub.cfg=/var/tmp/nx-efi-embed.cfg"
-if [ "$ALONG" -eq 1 ]; then
-  mmd -i "$ESP_DEV" ::EFI/NX 2>/dev/null || true
-  mcopy -D o -i "$ESP_DEV" /var/tmp/BOOTX64.EFI ::EFI/NX/grubx64.efi
-  mmd -i "$ESP_DEV" ::EFI/BOOT 2>/dev/null || true
-  if mdir -i "$ESP_DEV" ::EFI/BOOT/BOOTX64.EFI >/dev/null 2>&1; then
-    echo "note: existing EFI/BOOT/BOOTX64.EFI left untouched; add a UEFI boot entry for EFI/NX/grubx64.efi (efibootmgr)"
-  else
-    mcopy -i "$ESP_DEV" /var/tmp/BOOTX64.EFI ::EFI/BOOT/BOOTX64.EFI
-  fi
+mmd -i "${DISK}${P}2" ::EFI ::EFI/BOOT
+if [ -f /usr/lib/shim/shimx64.efi.signed ] && [ -f /usr/lib/grub/x86_64-efi-signed/grubx64.efi.signed ]; then
+  echo "EFI: Secure Boot capable chain (signed shim + signed grub)"
+  mcopy -i "${DISK}${P}2" /usr/lib/shim/shimx64.efi.signed ::EFI/BOOT/BOOTX64.EFI
+  mcopy -i "${DISK}${P}2" /usr/lib/grub/x86_64-efi-signed/grubx64.efi.signed ::EFI/BOOT/grubx64.efi
+  [ -f /usr/lib/shim/mmx64.efi.signed ] && mcopy -i "${DISK}${P}2" /usr/lib/shim/mmx64.efi.signed ::EFI/BOOT/mmx64.efi
+  mcopy -i "${DISK}${P}2" /var/tmp/nx-efi-embed.cfg ::EFI/BOOT/grub.cfg
 else
-  mmd -i "$ESP_DEV" ::EFI ::EFI/BOOT
-  mcopy -i "$ESP_DEV" /var/tmp/BOOTX64.EFI ::EFI/BOOT/BOOTX64.EFI
+  echo "WARNING: signed shim/grub not installed: using UNSIGNED grub (Secure Boot will not work)"
+  grub-mkstandalone -O x86_64-efi --modules="part_gpt part_msdos ext2 fat normal search search_fs_uuid configfile linux" -o /var/tmp/BOOTX64.EFI "boot/grub/grub.cfg=/var/tmp/nx-efi-embed.cfg"
+  mcopy -i "${DISK}${P}2" /var/tmp/BOOTX64.EFI ::EFI/BOOT/BOOTX64.EFI
 fi
 sync
 echo "== NX install finished OK =="
