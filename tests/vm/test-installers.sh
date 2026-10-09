@@ -14,6 +14,7 @@ fail() { echo "FAIL: $*"; FAIL=1; }
 [ -f /usr/lib/shim/shimx64.efi.signed ] || { echo "install shim-signed and grub-efi-amd64-signed first"; exit 2; }
 mkdir -p "$W/src"; xorriso -osirrox on -indev "$ISO" -extract /casper "$W/src/casper" >/dev/null 2>&1 || { echo "cannot extract ISO"; exit 2; }
 
+# shellcheck disable=SC2054
 boot_check() {  # image mode(bios|uefi|secboot)
   local img="$1" mode="$2" vars="$W/vars-$2.fd" i q log; local -a args=()
   log="$W/boot-$2-$(basename "$1").log"
@@ -21,7 +22,6 @@ boot_check() {  # image mode(bios|uefi|secboot)
   case "$mode" in
     uefi) cp /usr/share/OVMF/OVMF_VARS_4M.fd "$vars"
       args=(-drive "if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd" -drive "if=pflash,format=raw,file=$vars");;
-    # shellcheck disable=SC2054
     secboot) cp /usr/share/OVMF/OVMF_VARS_4M.ms.fd "$vars"
       args=(-machine q35,smm=on -global driver=cfi.pflash01,property=secure,value=on
             -drive "if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.secboot.fd" -drive "if=pflash,format=raw,file=$vars");;
