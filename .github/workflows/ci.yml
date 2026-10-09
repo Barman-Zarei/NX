@@ -15,10 +15,10 @@ jobs:
         run: |
           git clone --depth 1 https://github.com/Barman-Zarei/Brok /tmp/Brok
           NX_BROK_DIR=/tmp/Brok python3 -m unittest tests.unit.test_brok_adapter -v
-      - name: Windows-tool stack on Python 3.8 + PySide2 5.15.2.1 (offscreen)
+      - name: Windows-tool GUI on Python 3.12 + PySide6 (offscreen)
         run: |
-          pip install uv && uv venv --python 3.8 /tmp/v38 && uv pip install --python /tmp/v38/bin/python PySide2==5.15.2.1
-          /tmp/v38/bin/python -m unittest discover -s tests/unit -p 'test_*.py' -v
+          pip install uv && uv venv --python 3.12 /tmp/v312 && uv pip install --python /tmp/v312/bin/python PySide6-Essentials
+          /tmp/v312/bin/python -m unittest tests.unit.test_gui_offscreen -v
   iso-and-vm-tests:
     needs: lint-unit
     runs-on: ubuntu-24.04

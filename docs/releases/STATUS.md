@@ -74,3 +74,7 @@
 - Desktop flavor `NX_FLAVOR=desktop`: XFCE + lightdm, Calamares + `/etc/calamares` config (settings, unpackfs, partition, bootloader, users, shellprocess, NX branding), os-prober, Brok cloned to `/opt/brok` (license + NOTICE kept), `nx-ai`, Software Center GUI, NX wallpaper/dark theme setup script, polkit/pkexec. CI job `desktop-flavor` checks image contents, boots with a virtual display and fails if the last screenshot is blank. It does NOT run a Calamares installation: that needs a manual run (Calamares path is not Secure Boot capable; the CLI installers are).
 - `release.yml`: build, boot and installer tests, package manifest, SHA256SUMS, detached GPG signature from repository secrets, pre-release vs stable by tag. Requires the maintainer to create the GPG key and secrets.
 - Not started: ARM64, local-model (Ollama) test, voice, PolicyKit action files for NX tools, Windows .exe packaging, update channel/APT repo.
+
+## Branches (2026-10-09)
+- `main`: modern stack. Windows tool = PySide6/Qt 6 (Windows 10+). GUI logic test passed headless on Linux with Python 3.12 + PySide6-Essentials.
+- `LEGACY`: Windows 7 SP1+ edition (Python 3.8 + PySide2 5.15.2.1), CI only runs lint/unit/tool tests. Tested on Linux only; never on Windows 7. Does not support installing NX alongside Windows 7 (needs MBR/BIOS support, not implemented).

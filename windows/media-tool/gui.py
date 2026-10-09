@@ -1,9 +1,9 @@
-"""NX Media Tool GUI: verifies an NX ISO against its .sha256 file. PySide2 5.15 / Python 3.8 (Windows 7 SP1 target).
-USB writing is NOT implemented. Tested headless on Linux (offscreen) with Python 3.8.20 + PySide2 5.15.2.1; never run on Windows 7."""
+"""NX Media Tool GUI: verifies an NX ISO against its .sha256 file. PySide6 / Qt 6 (Windows 10+). Windows 7: use the LEGACY branch.
+USB writing is NOT implemented. Tested headless on Linux (offscreen) with Python 3.12 + PySide6; never run on Windows."""
 import os
 import sys
 
-from PySide2.QtWidgets import QApplication, QFileDialog, QLabel, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QApplication, QFileDialog, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from nxverify import verify
 
@@ -51,7 +51,7 @@ class VerifyWindow(QWidget):
 def main():
     app = QApplication(sys.argv)
     w = VerifyWindow(); w.show()
-    return app.exec_()
+    return app.exec()
 
 
 if __name__ == "__main__":
