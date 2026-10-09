@@ -35,3 +35,9 @@
 **Limits**
 - Only loop-device images in QEMU/TCG. No physical disk, no KVM, no Secure Boot, no dual boot, no graphical installer, no login test after boot (only the prompt was seen), no network/audio/graphics tests.
 - Build VM kernel lacks vfat, so the ESP is written with mtools and `grub-mkstandalone`; unverified on a standard kernel.
+
+## Session 1, Brok adapter (2026-10-09)
+- `ai/service/brok_adapter.py` runs the real Brok CLI (`python -m brok.cli`, Brok 0.2.0 clone at /home/claude/Brok) as an isolated subprocess: refuses root, stdin=/dev/null so Brok's own approver denies all approvals, untrusted text cannot drive `code`/`fix`, statuses instead of exceptions, `enabled=False` switch.
+- `tests/unit/test_brok_adapter.py`: 7 tests passed as a NON-root user (against real Brok `doctor` offline: all providers unreachable, parsed correctly; `ask` offline returned a status without crashing). As root, 5 skip by design.
+- NOT tested: a configured local model (no Ollama here), cloud providers, voice, desktop integration, PolicyKit, installing Brok into the ISO, Brok dependencies on the target image.
+- Brok mainline needs Qt 6; Windows 7 stays unsupported there (legacy branch plan unchanged).
