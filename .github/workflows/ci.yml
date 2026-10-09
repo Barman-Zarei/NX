@@ -6,10 +6,10 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - run: sudo apt-get update && sudo apt-get install -y shellcheck libegl1 libgl1 libxkbcommon0 libfontconfig1 libglib2.0-0
+      - run: sudo apt-get update && sudo apt-get install -y shellcheck libegl1 libgl1 libxkbcommon0 libfontconfig1 libglib2.0-0 python3-gi gir1.2-gtk-3.0 xvfb
       - run: shellcheck -S warning build/build-iso.sh installer/nx-install installer/nx-install-alongside tests/vm/*.sh
       - name: Unit tests (Python 3.12)
-        run: python3 -m unittest discover -s tests/unit -p 'test_*.py'
+        run: xvfb-run -a python3 -m unittest discover -s tests/unit -p 'test_*.py'
       - run: python3 compatibility/validate.py
       - name: Brok adapter tests against real Brok (runner is non-root)
         run: |
@@ -43,16 +43,44 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: nx-iso-and-logs, path: "out/\ntest-logs/" }
-  desktop-flavor:   # manual only (workflow_dispatch): builds the UNTESTED XFCE flavor and uploads screenshots for a human to inspect
-    if: github.event_name == 'workflow_dispatch'
+  desktop-flavor:   # builds the XFCE flavor, checks its contents inside the image, boots it graphically and gates on the screenshot
+    needs: lint-unit
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
       - run: |
           sudo apt-get update
-          sudo apt-get install -y debootstrap xorriso squashfs-tools grub-pc-bin grub-efi-amd64-bin grub-efi-amd64-signed shim-signed mtools dosfstools parted qemu-system-x86 socat imagemagick
+          sudo apt-get install -y debootstrap xorriso squashfs-tools grub-pc-bin grub-efi-amd64-bin grub-efi-amd64-signed shim-signed \
+            mtools dosfstools parted qemu-system-x86 socat imagemagick python3-pil
+      - name: Enable KVM if present
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm || true
       - run: sudo NX_FLAVOR=desktop build/build-iso.sh
+      - name: Image content checks (chroot)
+        run: |
+          C=/var/tmp/nx-build/chroot
+          sudo chroot $C test -x /usr/bin/calamares
+          sudo chroot $C test -f /etc/calamares/settings.conf
+          sudo chroot $C test -f /opt/brok/LICENSE.txt && sudo chroot $C test -f /opt/brok/NOTICE
+          sudo chroot $C python3 -c "import gi; gi.require_version('Gtk','3.0'); from gi.repository import Gtk"
+          sudo chroot $C su -s /bin/sh nx -c "NX_BROK_DIR=/opt/brok nx-ai doctor"
+          sudo chroot $C su -s /bin/sh nx -c "NX_AI_DISABLED=1 nx-ai ask hi" | grep -q disabled
+          sudo chroot $C test -f /usr/share/applications/nx-software.desktop
       - run: sudo chmod -R a+r out && tests/vm/desktop-screenshot.sh out/nx-os-*-desktop-amd64.iso shots 60 6
+      - name: Gate - last screenshot must show a real desktop (not black/blank)
+        run: |
+          python3 - <<'PY'
+          import glob
+          from PIL import Image
+          f = sorted(glob.glob("shots/shot-*.png"))[-1]
+          im = Image.open(f).convert("RGB").resize((160, 90))
+          n = len(set(im.getdata()))
+          print(f, "distinct colours:", n)
+          raise SystemExit(0 if n > 40 else 1)
+          PY
       - uses: actions/upload-artifact@v4
+        if: always()
         with: { name: desktop-screenshots, path: shots/ }

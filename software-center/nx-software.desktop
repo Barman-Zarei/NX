@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=NX Software Center
+Comment=Search, install and remove applications
+Exec=python3 /usr/share/nx/software-center/nx-software-gui.py
+Icon=system-software-install
+Categories=System;PackageManager;

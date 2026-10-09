@@ -1,0 +1,24 @@
+---
+componentName: nx
+welcomeStyleCalamares: false
+strings:
+  productName: NX OS
+  shortProductName: NX
+  version: 0.0.1
+  shortVersion: 0.0.1
+  versionedName: NX OS 0.0.1
+  shortVersionedName: NX 0.0.1
+  bootloaderEntryName: NX
+  productUrl: https://github.com/Barman-Zarei
+  supportUrl: https://github.com/Barman-Zarei
+  releaseNotesUrl: https://github.com/Barman-Zarei
+images:
+  productLogo: "logo.svg"
+  productIcon: "logo.svg"
+  productWelcome: "logo.svg"
+style:
+  sidebarBackground: "#14162a"
+  sidebarText: "#ffffff"
+  sidebarTextSelect: "#6c8cff"
+slideshow: "show.qml"
+slideshowAPI: 2

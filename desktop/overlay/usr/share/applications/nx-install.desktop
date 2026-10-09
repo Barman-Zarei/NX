@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Install NX OS
+Comment=Install NX OS to this computer (experimental)
+Exec=pkexec /usr/bin/calamares
+Icon=system-software-install
+Categories=System;

@@ -67,3 +67,10 @@
 - `.github/workflows/ci.yml` rewritten (lint, unit on 3.12 and 3.8/PySide2, Brok adapter tests, ISO build, BIOS/UEFI boot, installer tests, manual desktop job). Never run on GitHub.
 - Desktop flavor (`NX_FLAVOR=desktop`, XFCE + lightdm) and `tests/vm/desktop-screenshot.sh` are written but UNTESTED. lightdm autologin file is not yet removed by the installers after install (known gap).
 - `docs/security/signing.md` explains signatures; `docs/development/ci.md` explains CI.
+
+## Session 1, final push before CI (2026-10-09)
+**Verified here:** GTK3 Software Center GUI window logic (4 tests, real GTK under xvfb); `nx-ai` CLI + 1 new test, run as non-root against real Brok; installers now remove the lightdm live-autologin file (grep-checked, not boot-tested).
+**Written, to be verified by CI/hardware (nothing below has run):**
+- Desktop flavor `NX_FLAVOR=desktop`: XFCE + lightdm, Calamares + `/etc/calamares` config (settings, unpackfs, partition, bootloader, users, shellprocess, NX branding), os-prober, Brok cloned to `/opt/brok` (license + NOTICE kept), `nx-ai`, Software Center GUI, NX wallpaper/dark theme setup script, polkit/pkexec. CI job `desktop-flavor` checks image contents, boots with a virtual display and fails if the last screenshot is blank. It does NOT run a Calamares installation: that needs a manual run (Calamares path is not Secure Boot capable; the CLI installers are).
+- `release.yml`: build, boot and installer tests, package manifest, SHA256SUMS, detached GPG signature from repository secrets, pre-release vs stable by tag. Requires the maintainer to create the GPG key and secrets.
+- Not started: ARM64, local-model (Ollama) test, voice, PolicyKit action files for NX tools, Windows .exe packaging, update channel/APT repo.

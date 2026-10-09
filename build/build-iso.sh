@@ -40,18 +40,25 @@ mkdir -p /etc/systemd/system/getty@tty1.service.d
 printf "[Service]\nExecStart=\nExecStart=-/sbin/agetty --autologin nx --noclear %%I \$TERM\n" > /etc/systemd/system/getty@tty1.service.d/autologin.conf
 if [ "${NX_FLAVOR:-base}" = desktop ]; then
   apt-get install -y --no-install-recommends xorg xfce4 xfce4-terminal lightdm lightdm-gtk-greeter network-manager-gnome \
-    dbus-x11 adwaita-icon-theme fonts-noto-core fonts-noto-ui-core xdg-utils
+    dbus-x11 adwaita-icon-theme fonts-noto-core fonts-noto-ui-core xdg-utils \
+    calamares os-prober python3-gi gir1.2-gtk-3.0 pkexec polkitd git
   mkdir -p /etc/lightdm/lightdm.conf.d
   printf "[Seat:*]\nautologin-user=nx\nautologin-session=xfce\n" > /etc/lightdm/lightdm.conf.d/50-nx-live.conf
 fi
 apt-get clean; rm -rf /var/lib/apt/lists/*
 '
+if [ "$FLAVOR" = desktop ]; then
+  cp -a "$HERE/../desktop/overlay/." "$CH/"
+  mkdir -p "$CH/usr/share/nx"; cp -a "$HERE/../ai" "$HERE/../software-center" "$HERE/../compatibility" "$CH/usr/share/nx/"
+  rm -rf "$CH/opt/brok"; git clone --depth 1 https://github.com/Barman-Zarei/Brok "$CH/opt/brok"; rm -rf "$CH/opt/brok/.git"
+fi
 umount -l "$CH/dev" "$CH/proc" "$CH/sys" || true; trap - EXIT
 rm -rf "$ISO"; mkdir -p "$ISO/casper" "$ISO/boot/grub"
 KFILE=$(find "$CH/boot" -maxdepth 1 -name 'vmlinuz-*' | sort | head -n1)
 KV="${KFILE##*/vmlinuz-}"
 cp "$CH/boot/vmlinuz-$KV" "$ISO/casper/vmlinuz"; cp "$CH/boot/initrd.img-$KV" "$ISO/casper/initrd"
-mksquashfs "$CH" "$ISO/casper/filesystem.squashfs" -comp xz -e boot -noappend -no-progress
+EXCL=(-e boot); [ "$FLAVOR" = desktop ] && EXCL=()   # desktop keeps /boot: Calamares needs the kernel in the unpacked tree
+mksquashfs "$CH" "$ISO/casper/filesystem.squashfs" -comp xz "${EXCL[@]}" -noappend -no-progress
 ( cd "$ISO" && find . -type f ! -name md5sum.txt ! -path "./boot/grub/*" -print0 | xargs -0 md5sum > md5sum.txt )
 cp "$HERE/config/grub.cfg" "$ISO/boot/grub/grub.cfg"
 if [ "$FLAVOR" = base ]; then IMG="$OUT/nx-os-$VERSION-amd64.iso"; else IMG="$OUT/nx-os-$VERSION-$FLAVOR-amd64.iso"; fi

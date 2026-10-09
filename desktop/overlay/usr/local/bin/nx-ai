@@ -1,0 +1,2 @@
+#!/bin/sh
+exec python3 /usr/share/nx/ai/service/nx_ai_cli.py "$@"

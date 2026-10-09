@@ -42,5 +42,15 @@ class T(unittest.TestCase):
         self.assertIn(st, ("provider_error", "failed", "timeout"))
 
 
+
+class CliT(unittest.TestCase):
+    def test_cli_disabled(self):
+        import subprocess
+        env = dict(os.environ, NX_AI_DISABLED="1")
+        p = subprocess.run([sys.executable, os.path.join(os.path.dirname(__file__), "..", "..", "ai", "service", "nx_ai_cli.py"), "ask", "hi"],
+                           env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        self.assertEqual(p.returncode, 1); self.assertIn(b"disabled", p.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()

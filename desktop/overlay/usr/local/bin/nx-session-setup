@@ -1,0 +1,8 @@
+#!/bin/sh
+# Applies NX defaults at login (idempotent). Best effort: failures are ignored.
+xfconf-query -c xsettings -p /Net/ThemeName -n -t string -s Adwaita-dark 2>/dev/null
+for m in monitor0 monitorVirtual-1 monitorVGA-1 monitorHDMI-1 monitoreDP-1 monitorVirtual1; do
+  xfconf-query -c xfce4-desktop -p /backdrop/screen0/$m/workspace0/last-image -n -t string -s /usr/share/backgrounds/nx/wallpaper.svg 2>/dev/null
+  xfconf-query -c xfce4-desktop -p /backdrop/screen0/$m/workspace0/image-style -n -t int -s 5 2>/dev/null
+done
+exit 0

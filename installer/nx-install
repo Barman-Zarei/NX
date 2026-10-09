@@ -69,7 +69,7 @@ mkdir -p "$M/boot"; cp "$SRC/casper/vmlinuz" "$M/boot/vmlinuz"; cp "$SRC/casper/
 RU=$(blkid -s UUID -o value "$ROOT_DEV"); EU=$(blkid -s UUID -o value "$ESP_DEV")
 printf 'UUID=%s / ext4 defaults 0 1\nUUID=%s /boot/efi vfat umask=0077 0 2\n' "$RU" "$EU" > "$M/etc/fstab"
 echo "$HOSTN" > "$M/etc/hostname"
-rm -rf "$M/etc/systemd/system/getty@tty1.service.d" "$M/etc/casper.conf"
+rm -rf "$M/etc/systemd/system/getty@tty1.service.d" "$M/etc/casper.conf" "$M/etc/lightdm/lightdm.conf.d/50-nx-live.conf"
 chroot "$M" /bin/bash -c 'id nx >/dev/null 2>&1 && userdel -r nx || true'
 chroot "$M" useradd -m -s /bin/bash -G sudo "$USERN"
 printf '%s:%s\n' "$USERN" "$NX_PASSWORD" | chroot "$M" chpasswd

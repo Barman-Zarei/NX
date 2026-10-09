@@ -1,0 +1,5 @@
+[Desktop Entry]
+Type=Application
+Name=NX session setup
+Exec=/usr/local/bin/nx-session-setup
+OnlyShowIn=XFCE;

@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=NX AI check
+Comment=Show the status of the NX AI providers (Brok)
+Exec=xfce4-terminal --hold -e "nx-ai doctor"
+Icon=utilities-terminal
+Categories=System;
