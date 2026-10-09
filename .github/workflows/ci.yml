@@ -1,3 +1,4 @@
+# LEGACY branch: only checks the Windows-7-compatible tool (Python 3.8 / PySide2). OS builds and VM tests run on main.
 # Written by the NX maintainer tooling. NOT YET RUN on GitHub (first run may need small fixes). A green run is not a release.
 name: ci
 on: [push, pull_request, workflow_dispatch]
@@ -19,68 +20,3 @@ jobs:
         run: |
           pip install uv && uv venv --python 3.8 /tmp/v38 && uv pip install --python /tmp/v38/bin/python PySide2==5.15.2.1
           /tmp/v38/bin/python -m unittest discover -s tests/unit -p 'test_*.py' -v
-  iso-and-vm-tests:
-    needs: lint-unit
-    runs-on: ubuntu-24.04
-    timeout-minutes: 90
-    steps:
-      - uses: actions/checkout@v4
-      - run: |
-          sudo apt-get update
-          sudo apt-get install -y debootstrap xorriso squashfs-tools grub-pc-bin grub-efi-amd64-bin grub-efi-amd64-signed shim-signed \
-            mtools dosfstools parted gdisk ntfs-3g qemu-system-x86 ovmf
-      - name: Enable KVM if present
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm || true
-          ls -l /dev/kvm || echo "no KVM: tests fall back to slow TCG"
-      - run: sudo build/build-iso.sh
-      - run: sudo chmod -R a+r out && (cd out && sha256sum -c *.sha256)
-      - run: tests/vm/boot-test.sh out/nx-os-*-amd64.iso 1500
-      - run: tests/vm/boot-test-uefi.sh out/nx-os-*-amd64.iso 1500
-      - name: Installer tests (empty disk, alongside, Secure Boot)
-        run: sudo NX_LOG_DIR=$PWD/test-logs tests/vm/test-installers.sh out/nx-os-*-amd64.iso all
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with: { name: nx-iso-and-logs, path: "out/\ntest-logs/" }
-  desktop-flavor:   # builds the XFCE flavor, checks its contents inside the image, boots it graphically and gates on the screenshot
-    needs: lint-unit
-    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 120
-    steps:
-      - uses: actions/checkout@v4
-      - run: |
-          sudo apt-get update
-          sudo apt-get install -y debootstrap xorriso squashfs-tools grub-pc-bin grub-efi-amd64-bin grub-efi-amd64-signed shim-signed \
-            mtools dosfstools parted qemu-system-x86 socat imagemagick python3-pil
-      - name: Enable KVM if present
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm || true
-      - run: sudo NX_FLAVOR=desktop build/build-iso.sh
-      - name: Image content checks (chroot)
-        run: |
-          C=/var/tmp/nx-build/chroot
-          sudo chroot $C test -x /usr/bin/calamares
-          sudo chroot $C test -f /etc/calamares/settings.conf
-          sudo chroot $C test -f /opt/brok/LICENSE.txt && sudo chroot $C test -f /opt/brok/NOTICE
-          sudo chroot $C python3 -c "import gi; gi.require_version('Gtk','3.0'); from gi.repository import Gtk"
-          sudo chroot $C su -s /bin/sh nx -c "NX_BROK_DIR=/opt/brok nx-ai doctor"
-          sudo chroot $C su -s /bin/sh nx -c "NX_AI_DISABLED=1 nx-ai ask hi" | grep -q disabled
-          sudo chroot $C test -f /usr/share/applications/nx-software.desktop
-      - run: sudo chmod -R a+r out && tests/vm/desktop-screenshot.sh out/nx-os-*-desktop-amd64.iso shots 60 6
-      - name: Gate - last screenshot must show a real desktop (not black/blank)
-        run: |
-          python3 - <<'PY'
-          import glob
-          from PIL import Image
-          f = sorted(glob.glob("shots/shot-*.png"))[-1]
-          im = Image.open(f).convert("RGB").resize((160, 90))
-          n = len(set(im.getdata()))
-          print(f, "distinct colours:", n)
-          raise SystemExit(0 if n > 40 else 1)
-          PY
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with: { name: desktop-screenshots, path: shots/ }
