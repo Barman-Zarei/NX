@@ -2,6 +2,7 @@
 # NX OS minimal live ISO builder. Run as root on Ubuntu 24.04. Produces a real hybrid ISO (BIOS+UEFI via grub-mkrescue).
 set -euo pipefail
 VERSION="${NX_VERSION:-0.0.1-pre}"
+FLAVOR="${NX_FLAVOR:-base}"   # base (CLI, tested) | desktop (XFCE, UNTESTED: verify with tests/vm/desktop-screenshot.sh)
 SUITE=noble
 MIRROR="${NX_MIRROR:-http://archive.ubuntu.com/ubuntu}"
 ROOT="${NX_WORK:-/var/tmp/nx-build}"
@@ -27,7 +28,7 @@ printf 'NX OS 0.0.1 (pre-alpha) \\n \\l\n' > "$CH/etc/issue"
 printf 'export USERNAME="nx"\nexport USERFULLNAME="NX Live user"\nexport HOST="nx"\nexport BUILD_SYSTEM="NX"\nexport FLAVOUR="NX"\n' > "$CH/etc/casper.conf"
 cp "$HERE/config/os-release" "$CH/etc/os-release"
 cp "$HERE/config/motd" "$CH/etc/motd"
-chroot "$CH" /bin/bash -euxc '
+chroot "$CH" /usr/bin/env NX_FLAVOR="$FLAVOR" /bin/bash -euxc '
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y --no-install-recommends linux-image-virtual casper initramfs-tools systemd-sysv \
@@ -37,6 +38,12 @@ useradd -m -s /bin/bash -G sudo nx || true
 echo "nx:nx" | chpasswd
 mkdir -p /etc/systemd/system/getty@tty1.service.d
 printf "[Service]\nExecStart=\nExecStart=-/sbin/agetty --autologin nx --noclear %%I \$TERM\n" > /etc/systemd/system/getty@tty1.service.d/autologin.conf
+if [ "${NX_FLAVOR:-base}" = desktop ]; then
+  apt-get install -y --no-install-recommends xorg xfce4 xfce4-terminal lightdm lightdm-gtk-greeter network-manager-gnome \
+    dbus-x11 adwaita-icon-theme fonts-noto-core fonts-noto-ui-core xdg-utils
+  mkdir -p /etc/lightdm/lightdm.conf.d
+  printf "[Seat:*]\nautologin-user=nx\nautologin-session=xfce\n" > /etc/lightdm/lightdm.conf.d/50-nx-live.conf
+fi
 apt-get clean; rm -rf /var/lib/apt/lists/*
 '
 umount -l "$CH/dev" "$CH/proc" "$CH/sys" || true; trap - EXIT
@@ -47,7 +54,7 @@ cp "$CH/boot/vmlinuz-$KV" "$ISO/casper/vmlinuz"; cp "$CH/boot/initrd.img-$KV" "$
 mksquashfs "$CH" "$ISO/casper/filesystem.squashfs" -comp xz -e boot -noappend -no-progress
 ( cd "$ISO" && find . -type f ! -name md5sum.txt ! -path "./boot/grub/*" -print0 | xargs -0 md5sum > md5sum.txt )
 cp "$HERE/config/grub.cfg" "$ISO/boot/grub/grub.cfg"
-IMG="$OUT/nx-os-$VERSION-amd64.iso"
+if [ "$FLAVOR" = base ]; then IMG="$OUT/nx-os-$VERSION-amd64.iso"; else IMG="$OUT/nx-os-$VERSION-$FLAVOR-amd64.iso"; fi
 grub-mkrescue -o "$IMG" "$ISO" -- -volid NX_OS
 ( cd "$OUT" && sha256sum "$(basename "$IMG")" > "$(basename "$IMG").sha256" )
 echo "BUILT: $IMG"; ls -lh "$IMG"

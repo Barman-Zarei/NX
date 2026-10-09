@@ -1,4 +1,4 @@
-# NOT YET RUN on GitHub. A green run is not a release: the boot test output must be inspected.
+# Written by the NX maintainer tooling. NOT YET RUN on GitHub (first run may need small fixes). A green run is not a release.
 name: ci
 on: [push, pull_request, workflow_dispatch]
 jobs:
@@ -6,19 +6,29 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - run: sudo apt-get update && sudo apt-get install -y shellcheck libegl1 libgl1 libxkbcommon0 libfontconfig1 libglib2.0-0
       - run: shellcheck -S warning build/build-iso.sh installer/nx-install installer/nx-install-alongside tests/vm/*.sh
-      - run: python3 -m unittest discover -s tests/unit -p 'test_*.py'
+      - name: Unit tests (Python 3.12)
+        run: python3 -m unittest discover -s tests/unit -p 'test_*.py'
       - run: python3 compatibility/validate.py
-  iso-and-boot:
+      - name: Brok adapter tests against real Brok (runner is non-root)
+        run: |
+          git clone --depth 1 https://github.com/Barman-Zarei/Brok /tmp/Brok
+          NX_BROK_DIR=/tmp/Brok python3 -m unittest tests.unit.test_brok_adapter -v
+      - name: Windows-tool stack on Python 3.8 + PySide2 5.15.2.1 (offscreen)
+        run: |
+          pip install uv && uv venv --python 3.8 /tmp/v38 && uv pip install --python /tmp/v38/bin/python PySide2==5.15.2.1
+          /tmp/v38/bin/python -m unittest discover -s tests/unit -p 'test_*.py' -v
+  iso-and-vm-tests:
     needs: lint-unit
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - run: |
           sudo apt-get update
-          sudo apt-get install -y debootstrap xorriso squashfs-tools grub-pc-bin grub-efi-amd64-bin mtools dosfstools qemu-system-x86 ovmf
+          sudo apt-get install -y debootstrap xorriso squashfs-tools grub-pc-bin grub-efi-amd64-bin grub-efi-amd64-signed shim-signed \
+            mtools dosfstools parted gdisk ntfs-3g qemu-system-x86 ovmf
       - name: Enable KVM if present
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -28,5 +38,21 @@ jobs:
       - run: sudo chmod -R a+r out && (cd out && sha256sum -c *.sha256)
       - run: tests/vm/boot-test.sh out/nx-os-*-amd64.iso 1500
       - run: tests/vm/boot-test-uefi.sh out/nx-os-*-amd64.iso 1500
+      - name: Installer tests (empty disk, alongside, Secure Boot)
+        run: sudo NX_LOG_DIR=$PWD/test-logs tests/vm/test-installers.sh out/nx-os-*-amd64.iso all
       - uses: actions/upload-artifact@v4
-        with: { name: nx-iso, path: out/ }
+        if: always()
+        with: { name: nx-iso-and-logs, path: "out/\ntest-logs/" }
+  desktop-flavor:   # manual only (workflow_dispatch): builds the UNTESTED XFCE flavor and uploads screenshots for a human to inspect
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y debootstrap xorriso squashfs-tools grub-pc-bin grub-efi-amd64-bin grub-efi-amd64-signed shim-signed mtools dosfstools parted qemu-system-x86 socat imagemagick
+      - run: sudo NX_FLAVOR=desktop build/build-iso.sh
+      - run: sudo chmod -R a+r out && tests/vm/desktop-screenshot.sh out/nx-os-*-desktop-amd64.iso shots 60 6
+      - uses: actions/upload-artifact@v4
+        with: { name: desktop-screenshots, path: shots/ }

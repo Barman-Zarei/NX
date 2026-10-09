@@ -61,3 +61,9 @@
 **Software Center core** (`software-center/nxsoft.py`): search/info over apt-cache (real call checked), install/remove preview + approval gate, name validation, compatibility record lookup. 6 unit tests pass. No GUI, no Flatpak/AppImage/Wine integration, no actual install performed.
 **Dropped by the maintainer's decision:** 32-bit (i386) edition.
 **Still not built:** NX desktop (login, shell, settings, file manager), graphical installer (Calamares), Brok inside the ISO / local-model test, voice, PolicyKit integration, ARM64, physical-hardware tests, update channels, signed NX releases.
+
+## Session 1, CI preparation (2026-10-09)
+- `tests/vm/test-installers.sh` turns the manual installer procedures into a script. Run here (alongside part only, TCG): all PASS lines (confirmation refusal, install, NTFS byte-identical, partition rows, Windows boot file, EFI/BOOT untouched, EFI/NX present, Secure Boot boot). The `empty` part of the script was NOT run as a script (its steps were verified manually earlier).
+- `.github/workflows/ci.yml` rewritten (lint, unit on 3.12 and 3.8/PySide2, Brok adapter tests, ISO build, BIOS/UEFI boot, installer tests, manual desktop job). Never run on GitHub.
+- Desktop flavor (`NX_FLAVOR=desktop`, XFCE + lightdm) and `tests/vm/desktop-screenshot.sh` are written but UNTESTED. lightdm autologin file is not yet removed by the installers after install (known gap).
+- `docs/security/signing.md` explains signatures; `docs/development/ci.md` explains CI.
