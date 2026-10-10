@@ -17,7 +17,9 @@ jobs:
       - run: python3 compatibility/validate.py
       - name: Windows tool on Python 3.8 + PySide2 5.15.2.1 (offscreen)
         run: |
-          pip install uv pefile && uv venv --python 3.8 /tmp/v38 && uv pip install --python /tmp/v38/bin/python PySide2==5.15.2.1
+          python3 -m pip install --user --break-system-packages uv
+          python3 -m uv venv --python 3.8 /tmp/v38
+          python3 -m uv pip install --python /tmp/v38/bin/python PySide2==5.15.2.1 pefile
           /tmp/v38/bin/python -m unittest tests.unit.test_nxverify tests.unit.test_gui_offscreen tests.unit.test_win7_check -v
   windows-build-test:
     needs: lint-unit
