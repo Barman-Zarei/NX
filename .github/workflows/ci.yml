@@ -19,7 +19,9 @@ jobs:
           python3 -m unittest tests.unit.test_brok_adapter -v
       - name: Windows-tool GUI on Python 3.12 + PySide6 (offscreen)
         run: |
-          pip install uv && uv venv --python 3.12 /tmp/v312 && uv pip install --python /tmp/v312/bin/python PySide6-Essentials
+          python3 -m pip install --user --break-system-packages uv
+          python3 -m uv venv --python 3.12 /tmp/v312
+          python3 -m uv pip install --python /tmp/v312/bin/python PySide6-Essentials
           /tmp/v312/bin/python -m unittest tests.unit.test_gui_offscreen -v
   iso-and-vm-tests:
     needs: lint-unit

@@ -25,7 +25,8 @@ jobs:
       - name: Build ISO
         run: sudo -E NX_VERSION="${GITHUB_REF_NAME#v}" build/build-iso.sh
         env: { DEBIAN_FRONTEND: noninteractive, DEBCONF_NONINTERACTIVE_SEEN: "true" }
-      - run: sudo chmod -R a+r out && (cd out && sha256sum -c *.sha256)
+      - name: Take ownership of out/ (created by root; the runner user must write SHA256SUMS and the signature there)
+        run: sudo chown -R "$(id -u):$(id -g)" out && (cd out && sha256sum -c *.sha256)
       - run: tests/vm/boot-test.sh out/nx-os-*-amd64.iso 1500 && tests/vm/boot-test-uefi.sh out/nx-os-*-amd64.iso 1500
       - run: sudo tests/vm/test-installers.sh out/nx-os-*-amd64.iso all
       - name: Manifest (package list = SBOM-lite) and SHA256SUMS
