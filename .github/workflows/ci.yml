@@ -21,6 +21,20 @@ jobs:
           python3 -m uv venv --python 3.8 /tmp/v38
           python3 -m uv pip install --python /tmp/v38/bin/python PySide2==5.15.2.1 pefile
           /tmp/v38/bin/python -m unittest tests.unit.test_nxverify tests.unit.test_gui_offscreen tests.unit.test_win7_check -v
+  code-studio-legacy:   # Feature 50 on LEGACY: Python 3.8 + PySide2 5.15.2.1 only (offscreen). Linux runner = proxy for Windows 7.
+    runs-on: ubuntu-24.04
+    permissions: { contents: read }
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libfontconfig1 libglib2.0-0 git
+      - run: |
+          python3 -m pip install --user --break-system-packages uv
+          python3 -m uv venv --python 3.8 /tmp/v38
+          python3 -m uv pip install --python /tmp/v38/bin/python PySide2==5.15.2.1 pyyaml
+      - name: No PySide6 / Qt6 import anywhere in code-studio
+        run: "! grep -rn 'PySide6' code-studio --include=*.py | grep -v 'qt.py:.*does not run'"
+      - name: NX Code Studio tests
+        run: git config --global user.email ci@example.invalid && git config --global user.name ci && QT_QPA_PLATFORM=offscreen /tmp/v38/bin/python -m unittest discover -s code-studio/tests -v
   windows-build-test:
     needs: lint-unit
     runs-on: windows-2022
