@@ -33,6 +33,8 @@ jobs:
           python3 -m uv pip install --python /tmp/v38/bin/python PySide2==5.15.2.1 pyyaml
       - name: No PySide6 / Qt6 import anywhere in code-studio
         run: "! grep -rn 'PySide6' code-studio --include=*.py | grep -v 'qt.py:.*does not run'"
+      - name: nxsys tests
+        run: /tmp/v38/bin/python -m unittest discover -s nx-core/tests -v
       - name: NX Code Studio tests
         run: git config --global user.email ci@example.invalid && git config --global user.name ci && QT_QPA_PLATFORM=offscreen /tmp/v38/bin/python -m unittest discover -s code-studio/tests -v
   windows-build-test:
