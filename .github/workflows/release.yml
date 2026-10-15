@@ -4,6 +4,9 @@ name: release
 on:
   push:
     tags: ['v*']
+concurrency:
+  group: "release-${{ github.ref_name }}"
+  cancel-in-progress: false
 jobs:
   release:
     runs-on: ubuntu-24.04
@@ -11,6 +14,16 @@ jobs:
     permissions: { contents: write }
     steps:
       - uses: actions/checkout@v4
+      - name: Validate tag format (vMAJOR.MINOR.PATCH[-suffix])
+        run: echo "$GITHUB_REF_NAME" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'
+      - name: Pre-release tests (Code Studio + unit + compatibility DB)
+        run: |
+          sudo apt-get update && sudo apt-get install -y git libegl1 libgl1 libxkbcommon0 libfontconfig1 libglib2.0-0 python3-gi gir1.2-gtk-3.0 xvfb
+          python3 -m pip install --user --break-system-packages pyyaml PySide6-Essentials
+          git config --global user.email ci@example.invalid && git config --global user.name ci
+          QT_QPA_PLATFORM=offscreen python3 -m unittest discover -s code-studio/tests
+          xvfb-run -a python3 -m unittest discover -s tests/unit -p 'test_*.py'
+          python3 compatibility/validate.py
       - run: |
           sudo apt-get update
           sudo apt-get install -y debootstrap xorriso squashfs-tools grub-pc-bin grub-efi-amd64-bin grub-efi-amd64-signed shim-signed \
@@ -29,6 +42,9 @@ jobs:
         run: sudo chown -R "$(id -u):$(id -g)" out && (cd out && sha256sum -c *.sha256)
       - run: tests/vm/boot-test.sh out/nx-os-*-amd64.iso 1500 && tests/vm/boot-test-uefi.sh out/nx-os-*-amd64.iso 1500
       - run: sudo tests/vm/test-installers.sh out/nx-os-*-amd64.iso all
+      - name: Verify the image is a real ISO 9660 with boot metadata
+        run: |
+          f=$(ls out/nx-os-*-amd64.iso); file "$f" | grep -q 'ISO 9660'; xorriso -indev "$f" -report_el_torito plain 2>&1 | grep -q 'El Torito'
       - name: Manifest (package list = SBOM-lite) and SHA256SUMS
         run: |
           sudo chroot /var/tmp/nx-build/chroot dpkg-query -W -f='${Package}\t${Version}\t${Architecture}\n' | sudo tee out/nx-packages.tsv >/dev/null

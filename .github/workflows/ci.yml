@@ -23,6 +23,15 @@ jobs:
           python3 -m uv venv --python 3.12 /tmp/v312
           python3 -m uv pip install --python /tmp/v312/bin/python PySide6-Essentials
           /tmp/v312/bin/python -m unittest tests.unit.test_gui_offscreen -v
+  code-studio:   # Feature 50 core + GUI, offscreen. Main branch = Python 3.12 + PySide6.
+    runs-on: ubuntu-24.04
+    permissions: { contents: read }
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libfontconfig1 libglib2.0-0 git
+      - run: python3 -m pip install --user --break-system-packages pyyaml PySide6-Essentials
+      - name: NX Code Studio tests (headless core + offscreen GUI)
+        run: git config --global user.email ci@example.invalid && git config --global user.name ci && QT_QPA_PLATFORM=offscreen python3 -m unittest discover -s code-studio/tests -v
   iso-and-vm-tests:
     needs: lint-unit
     runs-on: ubuntu-24.04

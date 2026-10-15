@@ -31,7 +31,7 @@ cp "$HERE/config/motd" "$CH/etc/motd"
 chroot "$CH" /usr/bin/env NX_FLAVOR="$FLAVOR" /bin/bash -euxc '
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y --no-install-recommends linux-image-virtual casper initramfs-tools systemd-sysv \
+apt-get install -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold --no-install-recommends linux-image-virtual casper initramfs-tools systemd-sysv \
   network-manager sudo less nano iproute2 ca-certificates locales \
   parted dosfstools mtools e2fsprogs squashfs-tools grub-pc-bin grub-efi-amd64-bin grub-efi-amd64-signed shim-signed efibootmgr gdisk
 useradd -m -s /bin/bash -G sudo nx || true
@@ -39,7 +39,7 @@ echo "nx:nx" | chpasswd
 mkdir -p /etc/systemd/system/getty@tty1.service.d
 printf "[Service]\nExecStart=\nExecStart=-/sbin/agetty --autologin nx --noclear %%I \$TERM\n" > /etc/systemd/system/getty@tty1.service.d/autologin.conf
 if [ "${NX_FLAVOR:-base}" = desktop ]; then
-  apt-get install -y --no-install-recommends xorg xfce4 xfce4-terminal lightdm lightdm-gtk-greeter network-manager-gnome \
+  apt-get install -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold --no-install-recommends xorg xfce4 xfce4-terminal lightdm lightdm-gtk-greeter network-manager-gnome \
     dbus-x11 adwaita-icon-theme fonts-noto-core fonts-noto-ui-core xdg-utils \
     calamares os-prober python3-gi gir1.2-gtk-3.0 pkexec polkitd git
   mkdir -p /etc/lightdm/lightdm.conf.d
