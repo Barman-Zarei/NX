@@ -13,7 +13,7 @@ All results below come from commands actually run in this session's container
 | Workflow YAML syntax | PyYAML `safe_load` on `.github/workflows/*.yml` | local | PASS (syntax only; NOT run on GitHub) |
 | ISO build | `NX_WORK=/var/tmp/nx-build bash build/build-iso.sh` | debootstrap, local | PASS: ISO produced (168 MB) |
 | ISO structure | `xorriso -indev ... -report_el_torito plain`, `sha256sum -c` | local | PASS: ISO 9660, El Torito BIOS + UEFI entries, checksum OK |
-| ISO boot, BIOS (QEMU TCG) | `tests/vm/boot-test.sh <iso> 1100` | QEMU TCG, 1.5 GB | **FAIL** (3 runs): drops to initramfs shell, `cow format specified as 'overlay' and no support found`. Tried: `MODULES=most` in initramfs, installing zstd in the chroot, regenerating initrd (overlay.ko.zst is present in the initrd's early segment). Root cause NOT determined. An earlier build by the maintainer reportedly booted (docs/releases/STATUS.md); this build did not. |
+| ISO boot, BIOS (QEMU TCG) | `tests/vm/boot-test.sh <iso> 1100` | QEMU TCG, 1.5 GB | **FAIL** (3 runs): drops to initramfs shell, `cow format specified as 'overlay' and no support found`. Tried: `MODULES=most` in initramfs, installing zstd in the chroot, regenerating initrd (overlay.ko.zst is present in the initrd's early segment). Also tried (run 4): moving all modules into the main initrd segment - still FAIL. Root cause NOT determined. An earlier build by the maintainer reportedly booted (docs/releases/STATUS.md); this build did not. |
 | ISO boot, UEFI | `tests/vm/boot-test-uefi.sh` | QEMU TCG + OVMF | NOT TESTED in this session (run was interrupted without output) |
 | Installer on ISO | - | - | NOT TESTED in this session |
 | Windows 7 host VM | - | - | NOT TESTED (no Windows 7 available) |
