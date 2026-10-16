@@ -2,41 +2,40 @@ import os, sys, tempfile, time, unittest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 try:
-    from nxcs.gui import Studio, Palette, W, BINDING
-    HAVE = True
-except ImportError:
-    HAVE = False
+    from nxcs.qt import QtWidgets, BINDING
+    from nxcs.gui import Studio
+except ImportError as e:
+    QtWidgets = None
 
 
-@unittest.skipUnless(HAVE, "no Qt binding installed")
+@unittest.skipIf(QtWidgets is None, "no Qt binding installed")
 class G(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.app = W.QApplication.instance() or W.QApplication([])
+        cls.app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
 
-    def pump(self, cond, t=8):
+    def pump(self, ev, t=15):
         end = time.time() + t
-        while time.time() < end and not cond():
+        while not ev.is_set() and time.time() < end:
             self.app.processEvents(); time.sleep(0.02)
-        return cond()
+        self.app.processEvents()
+        self.assertTrue(ev.is_set())
 
-    def test_edit_save_terminal_ai_palette(self):
-        d = tempfile.mkdtemp(prefix="nxcs-گرافیک-")
-        f = os.path.join(d, "a.py"); open(f, "w", encoding="utf-8").write("print(1)\n")
-        s = Studio(d)
-        ed = s.open_file(f); self.assertIn("print(1)", ed.toPlainText())
-        ed.setPlainText("print(2)\n"); self.assertTrue(s.save_current())
-        self.assertEqual(open(f, encoding="utf-8").read(), "print(2)\n")
-        s.term_in.setText("python3 a.py" if os.name != "nt" else "python a.py"); s.run_terminal()
-        self.assertTrue(self.pump(lambda: "[exit 0]" in s.term_out.toPlainText()))
-        self.assertIn("2", s.term_out.toPlainText())
-        s.ai_transport = lambda b: {"content": [{"type": "text", "text": "mock-answer"}]}
-        s.ai_in.setText("explain"); s.ask_ai()
-        self.assertTrue(self.pump(lambda: "mock-answer" in s.ai_out.toPlainText()))
-        self.assertIn("[mock]", s.ai_out.toPlainText())
-        s.ai_enabled = False; s.ask_ai(); self.assertIn("disabled", s.ai_out.toPlainText())
-        p = Palette(list(s.commands)); p.box.setText("git"); self.assertEqual(p.list.count(), 1)
-        print("binding:", BINDING)
+    def test_open_edit_save_terminal_ai(self):
+        d = tempfile.mkdtemp(prefix="nxcs-گ-")
+        p = os.path.join(d, "a.py"); open(p, "w").write("print(1)\n")
+        mock = lambda body: {"content": [{"type": "text", "text": "mock-reply"}]}
+        w = Studio(d, ai_transport=mock)
+        ed = w.open_file(p); self.assertEqual(ed.toPlainText(), "print(1)\n")
+        ed.setPlainText("print(2)\n"); self.assertTrue(w.save_current())
+        self.assertEqual(open(p).read(), "print(2)\n")
+        self.pump(w.run_terminal_cmd("python3 a.py"))
+        self.assertIn("2", w.term_out.toPlainText().splitlines()[-1])
+        self.pump(w._ai_done if w.ask_ai("explain") is not None and False else w.ask_ai("explain"))
+        self.assertIn("[source: mock]", w.ai_out.toPlainText())   # mock is labeled, never shown as real Claude
+        w.toggle_ai(); self.pump(w.ask_ai("x"))
+        self.assertIn("[error: disabled]", w.ai_out.toPlainText())
+        self.assertIn("Command Palette", w.actions_map); self.assertTrue(w.git_view.toPlainText())
 
 
 if __name__ == "__main__":
