@@ -30,6 +30,7 @@ cp "$HERE/config/os-release" "$CH/etc/os-release"
 cp "$HERE/config/motd" "$CH/etc/motd"
 chroot "$CH" /usr/bin/env NX_FLAVOR="$FLAVOR" /bin/bash -euxc '
 export DEBIAN_FRONTEND=noninteractive
+mkdir -p /etc/initramfs-tools/conf.d; echo MODULES=most > /etc/initramfs-tools/conf.d/nx-modules   # MODULES=dep inside a build host omits overlay/loop
 apt-get update
 apt-get install -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold --no-install-recommends linux-image-virtual casper initramfs-tools systemd-sysv \
   network-manager sudo less nano iproute2 ca-certificates locales \
