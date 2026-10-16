@@ -25,7 +25,7 @@ deb http://security.ubuntu.com/ubuntu $SUITE-security main universe
 EOL
 echo nx > "$CH/etc/hostname"
 printf 'NX OS 0.0.1 (pre-alpha) \\n \\l\n' > "$CH/etc/issue"
-printf 'export USERNAME="nx"\nexport USERFULLNAME="NX Live user"\nexport HOST="nx"\nexport BUILD_SYSTEM="NX"\nexport FLAVOUR="NX"\n' > "$CH/etc/casper.conf"
+printf 'export USERNAME="nx"\nexport USERFULLNAME="NX Live user"\nexport HOST="nx"\nexport BUILD_SYSTEM=\"Ubuntu\"\nexport FLAVOUR="NX"\n' > "$CH/etc/casper.conf"
 cp "$HERE/config/os-release" "$CH/etc/os-release"
 cp "$HERE/config/motd" "$CH/etc/motd"
 chroot "$CH" /usr/bin/env NX_FLAVOR="$FLAVOR" /bin/bash -euxc '
