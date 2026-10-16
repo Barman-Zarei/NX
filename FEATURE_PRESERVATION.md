@@ -5,53 +5,53 @@ Most of features 1-49 did NOT exist in the repository before this work; they are
 
 | # | Feature | Status | Existing/new source | Limitations |
 |---|---|---|---|---|
-| 1 | NX Self-Healing | PLANNED | - | none found |
-| 2 | NX Rescue Environment | PLANNED | docs/installation/recovery.md (docs only) | no rescue image/workflow in code |
-| 3 | NX Offline Pack | PLANNED | - | none found |
+| 1 | NX Self-Healing | PARTIALLY IMPLEMENTED (headless) | nx-core/nxsys/sysfeatures_a.py diagnose/repair | diagnose dpkg/disk/systemd; one allow-listed repair; no GUI, no logs viewer |
+| 2 | NX Rescue Environment | PARTIALLY IMPLEMENTED (headless) | sysfeatures_a.py rescue_plan; docs/installation/recovery.md | prints documented recovery commands; no bootable rescue image built or tested |
+| 3 | NX Offline Pack | IMPLEMENTED AND TESTED (headless service; no GUI) | sysfeatures_a.py offline_pack/manifest/verify_pack | download step needs apt-get + network (not exercised); manifest/verify tested |
 | 4 | NX Hardware Lab | IMPLEMENTED AND TESTED (inventory only, headless) | nx-core/nxsys/hwlab.py; tests/test_nxsys.py | no diagnostics/stress tests run; no GUI |
-| 5 | NX Easy Mode | PLANNED | - | none |
-| 6 | NX App Inspector | PARTIALLY IMPLEMENTED | software-center/nxsoft.py (compat-DB lookup) | no permission/security/dependency inspection |
-| 7 | NX Safe Update | PLANNED | - | none |
-| 8 | NX Permission Map | PLANNED | ai/service/broker.py is an AI-tool permission broker, not this feature | - |
-| 9 | NX DevKit | PLANNED | code-studio/nxcs/forge.py gives project templates only | no env/Git/venv manager |
+| 5 | NX Easy Mode | PARTIALLY IMPLEMENTED (headless) | sysfeatures_a.py set_mode/visible_features | mode flag + feature filter only; no simplified UI |
+| 6 | NX App Inspector | PARTIALLY IMPLEMENTED (headless) | sysfeatures_a.py inspect_deb; software-center/nxsoft.py | reads deb metadata/scripts only; no signature, malware or permission analysis |
+| 7 | NX Safe Update | IMPLEMENTED, NOT FULLY TESTED (headless; hardware/desktop-dependent, real behaviour untested here) | sysfeatures_a.py preview_updates | preview only (apt-get -s); explicitly provides NO rollback |
+| 8 | NX Permission Map | PARTIALLY IMPLEMENTED (headless) | sysfeatures_a.py permission_map/set_mode_path | filesystem permissions only; not app/portal permissions |
+| 9 | NX DevKit | PARTIALLY IMPLEMENTED (headless) | sysfeatures_a.py devkit_status/create_venv | tool detection + venv creation; no version manager |
 | 10 | NX Storage Analyzer | IMPLEMENTED AND TESTED (headless, preview only) | nx-core/nxsys/storage.py | no GUI; never deletes |
-| 11 | NX Migration Assistant | PLANNED | - | none |
-| 12 | NX Driver Center | PLANNED | - | none |
-| 13 | NX Backup & Restore | PLANNED | - | none (installer scripts are not a backup feature) |
-| 14 | NX Compatibility Center | PARTIALLY IMPLEMENTED | compatibility/database/apps.json, compatibility/validate.py | apps DB + schema validation only; no UI |
-| 15 | NX Performance Manager | PLANNED | - | none |
-| 16 | NX Disk Manager | PARTIALLY IMPLEMENTED | installer/nx-install, nx-install-alongside (disk logic inside installers) | not a manager; no inspection UI |
+| 11 | NX Migration Assistant | IMPLEMENTED AND TESTED (headless service; no GUI) | sysfeatures_a.py migrate_preview/migrate_apply | copies only; symlinks and existing files skipped, originals untouched; settings migration not implemented |
+| 12 | NX Driver Center | IMPLEMENTED, NOT FULLY TESTED (headless; hardware/desktop-dependent, real behaviour untested here) | sysfeatures_b.py detect_drivers | detection via lspci only; never installs drivers |
+| 13 | NX Backup & Restore | IMPLEMENTED AND TESTED (headless service; no GUI) | sysfeatures_a.py backup/restore | tar.gz with checksum; restore rejects traversal/links; no incremental/encryption |
+| 14 | NX Compatibility Center | PARTIALLY IMPLEMENTED (headless) | sysfeatures_b.py system_requirements; compatibility/ | requirements check + existing compatibility DB files |
+| 15 | NX Performance Manager | PARTIALLY IMPLEMENTED (headless) | sysfeatures_b.py snapshot/startup_time | monitoring + textual proposals; applies no changes |
+| 16 | NX Disk Manager | PARTIALLY IMPLEMENTED (headless) | sysfeatures_b.py list_disks/plan_format/format_device | inspect + guarded format only; no partitioning; destructive path never run against a real disk in tests |
 | 17 | NX Install Preflight | IMPLEMENTED AND TESTED (checks only, headless) | nx-core/nxsys/preflight.py | not wired into installers/Calamares |
 | 18 | NX Bug Report Builder | IMPLEMENTED AND TESTED (headless) | nx-core/nxsys/bugreport.py | no GUI/review dialog; never uploads |
-| 19 | NX Hardware Compatibility Database | PLANNED | compatibility/ holds an APPS db, not hardware | hardware DB absent |
-| 20 | NX Firewall Profiles | PLANNED | - | none |
-| 21 | NX Recovery Validator | PLANNED | - | none |
-| 22 | NX Configuration Audit | PLANNED | nxcs/review.py audits code, not system config | none |
+| 19 | NX Hardware Compatibility Database | IMPLEMENTED AND TESTED (headless service; no GUI) | sysfeatures_b.py CompatDB | verified vs user-report kept separate; local JSON file only |
+| 20 | NX Firewall Profiles | IMPLEMENTED, NOT FULLY TESTED (headless; hardware/desktop-dependent, real behaviour untested here) | sysfeatures_b.py firewall_preview/apply | preview tested; apply needs ufw + root and was NOT run |
+| 21 | NX Recovery Validator | IMPLEMENTED AND TESTED (headless service; no GUI) | sysfeatures_a.py validate_recovery | checks files/tools only; does not guarantee recovery |
+| 22 | NX Configuration Audit | PARTIALLY IMPLEMENTED (headless) | sysfeatures_a.py audit_sshd | sshd_config only; no auto-remediation |
 | 23 | NX Network Diagnostics | IMPLEMENTED AND TESTED (headless) | nx-core/nxsys/netdiag.py | no GUI; network checks depend on host |
-| 24 | NX App Test Bench | PLANNED | nxcs/testintel.py runs project tests only | no app isolation bench |
-| 25 | NX Language Toolkit | PLANNED | - | none |
-| 26 | NX Power Manager | PARTIALLY IMPLEMENTED (read-only status) | nx-core/nxsys/power.py | no controls/profiles; reports unsupported on VMs/desktops |
+| 24 | NX App Test Bench | IMPLEMENTED AND TESTED (headless service; no GUI) | sysfeatures_b.py run_app_test | runs the real command (network namespace if permitted); static inspection is not claimed |
+| 25 | NX Language Toolkit | PARTIALLY IMPLEMENTED (headless) | sysfeatures_b.py locales/set_locale_pref | lists locales and stores a per-user preference; does not install language packs |
+| 26 | NX Power Manager | IMPLEMENTED, NOT FULLY TESTED (headless; hardware/desktop-dependent, real behaviour untested here) | nxsys/power.py; sysfeatures_b.py power_profiles | status/capability only; no setting changes |
 | 27 | Startup Manager | PARTIALLY IMPLEMENTED (XDG autostart list + non-destructive disable) | nx-core/nxsys/startup.py | no systemd services; no GUI |
-| 28 | Clipboard History | PLANNED | - | none |
-| 29 | Screenshot Studio | PLANNED | - | none |
-| 30 | Notification Center | PLANNED | - | none |
-| 31 | Font Manager | PLANNED | - | none |
+| 28 | Clipboard History | IMPLEMENTED AND TESTED (headless service; no GUI) | sysfeatures_b.py Clipboard | history logic + secret filtering tested; no desktop clipboard hook |
+| 29 | Screenshot Studio | IMPLEMENTED, NOT FULLY TESTED (headless; hardware/desktop-dependent, real behaviour untested here) | sysfeatures_c.py screenshot | needs a display + grim/scrot/etc.; not tested with a display |
+| 30 | Notification Center | IMPLEMENTED, NOT FULLY TESTED (headless; hardware/desktop-dependent, real behaviour untested here) | sysfeatures_c.py Notifications | history tested; on-screen delivery (notify-send) not tested |
+| 31 | Font Manager | PARTIALLY IMPLEMENTED (headless) | sysfeatures_b.py list_fonts/install_font | list + user-dir install; no removal |
 | 32 | Archive Center | IMPLEMENTED AND TESTED (zip/tar, headless) | nx-core/nxsys/archive.py | no GUI; other formats not supported |
-| 33 | Document Center | PLANNED | - | none |
-| 34 | Audio Mixer | PLANNED | - | none |
-| 35 | Display Manager | PLANNED | - | none |
-| 36 | Device Pairing | PLANNED | - | none |
-| 37 | Night Light | PLANNED | - | none |
-| 38 | Password Vault | PLANNED | - | no crypto primitive chosen yet |
-| 39 | Privacy Dashboard | PLANNED | - | none |
-| 40 | Task Scheduler | PLANNED | - | none |
+| 33 | Document Center | PARTIALLY IMPLEMENTED (headless) | sysfeatures_b.py default_app | file-association lookup only |
+| 34 | Audio Mixer | IMPLEMENTED, NOT FULLY TESTED (headless; hardware/desktop-dependent, real behaviour untested here) | sysfeatures_c.py audio_sinks/set_volume | pactl wrapper; no audio hardware here |
+| 35 | Display Manager | IMPLEMENTED, NOT FULLY TESTED (headless; hardware/desktop-dependent, real behaviour untested here) | sysfeatures_c.py displays | xrandr wrapper; no display here |
+| 36 | Device Pairing | IMPLEMENTED, NOT FULLY TESTED (headless; hardware/desktop-dependent, real behaviour untested here) | sysfeatures_c.py bluetooth_devices/pair | bluetoothctl wrapper; no Bluetooth hardware here |
+| 37 | Night Light | IMPLEMENTED, NOT FULLY TESTED (headless; hardware/desktop-dependent, real behaviour untested here) | sysfeatures_c.py night_light_cmd | builds gammastep/redshift commands; not run |
+| 38 | Password Vault | IMPLEMENTED AND TESTED (headless service; no GUI) | sysfeatures_c.py Vault | AES-256-CBC+PBKDF2 via openssl, 0600 file; no GUI/autofill; not independently security-reviewed |
+| 39 | Privacy Dashboard | PARTIALLY IMPLEMENTED (headless) | sysfeatures_c.py privacy_report | device availability only; no per-app access tracking |
+| 40 | Task Scheduler | IMPLEMENTED, NOT FULLY TESTED (headless; hardware/desktop-dependent, real behaviour untested here) | sysfeatures_c.py list_tasks/add_task | user crontab wrapper; add_task validation tested, real crontab write not run |
 | 41 | Process Manager | PARTIALLY IMPLEMENTED (list + guarded terminate, headless) | nx-core/nxsys/procs.py | no GUI; no resource graph |
 | 42 | Duplicate Finder | IMPLEMENTED AND TESTED (headless, never deletes) | nx-core/nxsys/storage.py | no GUI/deletion workflow |
-| 43 | Secure Delete Guide | PLANNED | - | none |
-| 44 | Web Apps | PLANNED | - | none |
-| 45 | Game Mode | PLANNED | - | none |
-| 46 | Screen Recorder | PLANNED | - | none |
-| 47 | Share Sheet | PLANNED | - | none |
-| 48 | Accessibility Toolkit | PLANNED | - | none |
-| 49 | USB Manager | PLANNED | nx-core hwlab.block_devices lists removable flag only | no USB manager |
+| 43 | Secure Delete Guide | IMPLEMENTED AND TESTED (headless service; no GUI) | sysfeatures_c.py secure_delete_advice | guidance only; makes no erasure guarantee and deletes nothing |
+| 44 | Web Apps | IMPLEMENTED AND TESTED (headless service; no GUI) | sysfeatures_c.py create_webapp | creates a .desktop launcher for a URL (a browser wrapper, not a native app) |
+| 45 | Game Mode | PARTIALLY IMPLEMENTED (headless) | sysfeatures_c.py game_mode_plan | plan only; applies nothing; no FPS claims |
+| 46 | Screen Recorder | IMPLEMENTED, NOT FULLY TESTED (headless; hardware/desktop-dependent, real behaviour untested here) | sysfeatures_c.py record_command | builds ffmpeg x11grab command; not executed (no display) |
+| 47 | Share Sheet | PARTIALLY IMPLEMENTED (headless) | sysfeatures_c.py share_targets/share_email | target discovery + mail command |
+| 48 | Accessibility Toolkit | IMPLEMENTED, NOT FULLY TESTED (headless; hardware/desktop-dependent, real behaviour untested here) | sysfeatures_c.py a11y_status | reads GNOME gsettings if present; no toolkit UI |
+| 49 | USB Manager | IMPLEMENTED, NOT FULLY TESTED (headless; hardware/desktop-dependent, real behaviour untested here) | sysfeatures_c.py usb_devices/safe_to_eject | lists devices, refuses system disks; no real USB tested |
 | 50 | NX Code Studio | PARTIALLY IMPLEMENTED | code-studio/ (see FEATURES.md module table) | many modules incomplete |
