@@ -21,6 +21,7 @@ All results below come from commands actually run in this session's container
 | Static check: all Python | `python3 -m pyflakes <dirs>` | local | PASS for errors (no undefined names); only unused-import warnings |
 | Shell lint as in CI | `shellcheck -S warning build/build-iso.sh installer/* tests/vm/*.sh` | local | PASS |
 | CI workflows inspected with Pipeline Lab | `nxcs.pipeline.inspect` | local | DONE: ci.yml has 4 jobs, release.yml 1; actions (checkout, upload-artifact, action-gh-release), sudo/apt/KVM steps cannot run locally -> NOT executed |
+| Real-tool tests on virtual devices: screenshot (real PNG), display list, screen recording (real mp4), audio volume (PulseAudio null sink), cron add/list, font install/list, notification delivery (dunst), gsettings accessibility, usb/mime | `bash tests/run-real-tool-tests.sh` | Xvfb + dbus + PulseAudio + dunst in the container | **PASS** (9 tests, py3.12; also py3.8) |
 | Installer on ISO (empty-disk mode): install, refusal on non-empty disk, boot installed image BIOS/UEFI/UEFI+SecureBoot | `sudo tests/vm/test-installers.sh <iso> empty` | QEMU TCG, loop images | **PASS** (ALL INSTALLER TESTS PASSED) |
 | Installer alongside a fake-Windows GPT disk (NTFS partition byte-identical, partition rows unchanged, EFI/BOOT untouched, SecureBoot boot) | `sudo tests/vm/test-installers.sh <iso> alongside` | QEMU TCG, fake disk (NOT a real Windows install) | **PASS** |
 | ISO rebuilt FROM SCRATCH with the patched build script, then boot BIOS + UEFI | `NX_WORK=/var/tmp/nx-build2 bash build/build-iso.sh`; boot-test*.sh | local | **PASS** / **PASS** (reproducible) |
@@ -34,3 +35,5 @@ Code Studio's GUI tests run offscreen, not on a real display.
 Boot tests prove only that the kernel/casper reach a login prompt in an emulator. Graphical session, installation and real hardware are NOT TESTED.
 
 Still NOT TESTED: graphical desktop flavor, real hardware, Windows 7 host VM, live Claude API, GitHub-hosted CI. LEGACY unit tests (36) PASS on Python 3.8 + PySide2.
+
+Still NOT TESTED: physical audio/display/Bluetooth/USB/webcam hardware, ufw firewall apply (needs kernel netfilter), night light (redshift/gammastep not installed), GitHub-hosted CI, live Claude API, Windows 7 host.
