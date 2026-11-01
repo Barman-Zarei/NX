@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/assets/docs/assets/IMG_20261101_153705_659.jpg" alt="NX OS concept artwork — illustrative design, not a screenshot of the current build" width="100%">
+<img src="docs/assets/IMG_20261101_153705_659.jpg" alt="NX OS concept artwork — illustrative design, not a screenshot of the current build" width="100%">
 
 # NX OS
 
