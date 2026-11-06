@@ -4,7 +4,7 @@
 |---|---|---|
 | NX Studio Code (LEGACY, Electron 22) on real Windows 7 | NOT TESTED | upstream project states it was never booted on Win7; see code-studio/docs/LEGACY.md |
 | NX Studio layer (36 Python-core tests + extension smoke test), Linux | TESTED, PASS (3.12 locally; CI job `code-studio-legacy` uses 3.8, not yet run on GitHub) | |
-| NX APP TRANSLATOR: unit tests, Python 3.8 and 3.12 | TESTED, PASS (11) | |
+| NX APP TRANSLATOR: unit tests, Python 3.8 and 3.12 | TESTED, PASS (25, FAKE Brok) | |
 | NX APP TRANSLATOR: translated x86 + x64 sample programs executed under Wine | TESTED, PASS | proxy only: Wine implements the new APIs too |
 | NX APP TRANSLATOR / nxshim7.dll on real Windows 7 (x86 and x64) | NOT TESTED | no Windows 7 available |
 | NX ISO amd64 on QEMU BIOS/UEFI (TCG) | see TESTING.md | |

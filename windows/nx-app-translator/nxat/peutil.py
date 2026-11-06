@@ -34,7 +34,8 @@ def read_info(path):
         return {"arch": MACHINE_ARCH.get(pe.FILE_HEADER.Machine, "other"), "os": (o.MajorOperatingSystemVersion, o.MinorOperatingSystemVersion),
                 "subsystem": (o.MajorSubsystemVersion, o.MinorSubsystemVersion), "imports": imps, "delay": delay,
                 "signed": dd[4].VirtualAddress != 0 and dd[4].Size != 0, "dotnet": len(dd) > 14 and dd[14].VirtualAddress != 0,
-                "dll": bool(pe.FILE_HEADER.Characteristics & 0x2000)}
+                "dll": bool(pe.FILE_HEADER.Characteristics & 0x2000),
+                "sections": [x.Name.rstrip(b"\0").decode("latin1") for x in pe.sections]}
     finally:
         pe.close()
 

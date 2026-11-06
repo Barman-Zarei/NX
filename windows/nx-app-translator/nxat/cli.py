@@ -1,9 +1,32 @@
-"""nxat CLI:  analyze INPUT | translate INPUT -o OUT.exe --name NAME --entry REL.exe --confirm [--stub STUB.exe] [--electron-zip Z]"""
+"""nxat CLI:  analyze INPUT | translate INPUT -o OUT.exe --confirm [--name N] [--entry REL.exe] [--stub STUB.exe] [--strict] [--no-source-ai]"""
 import argparse, json, os, shutil, sys, tempfile
-from . import analyze as A, unpack as U, adapt as D, pack as K, peutil as P
+from . import analyze as A, unpack as U, adapt as D, pack as K, peutil as P, supervisor as S, decompile as DC, agent as AG
 
-NOTICE = ("NX APP TRANSLATOR modifies a program's binaries. Use it only on software you are entitled to modify (your own, open-source, or "
-          "licensed for it) and for your own machines; do not redistribute translated third-party software. Modified files lose their digital signature.")
+NOTICE = ("NX APP TRANSLATOR modifies a program so it can run on old (Windows 7) laptops. Modified files lose their digital signature. "
+          "Brok supervises every translation and may refuse it; use it only on software you are entitled to modify and do not redistribute translated third-party software.")
+
+
+def load_brok(brok_dir=None):
+    """The NX Brok adapter (ai/service/brok_adapter.py, Linux, never root). None if it cannot be loaded -> supervision fails closed."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    root = os.path.abspath(os.path.join(here, "..", "..", ".."))
+    for c in (root, "/usr/lib/nx", "/opt/nx"):
+        if os.path.isfile(os.path.join(c, "ai", "service", "brok_adapter.py")):
+            if c not in sys.path:
+                sys.path.insert(0, c)
+            try:
+                from ai.service.brok_adapter import BrokAdapter
+                return BrokAdapter(brok_dir=brok_dir, timeout=300)
+            except Exception:
+                return None
+    return None
+
+
+def default_stub():
+    for c in (os.environ.get("NXAT_STUB", ""), "/usr/share/nx/nx-app-installer.exe", os.path.join(os.path.dirname(os.path.abspath(__file__)), "nx-app-installer.exe")):
+        if c and os.path.isfile(c):
+            return c
+    return None
 
 
 def _prep(inp, work):
@@ -30,51 +53,71 @@ def cmd_analyze(a):
     return 0
 
 
-def cmd_translate(a):
-    print(NOTICE)
+def cmd_translate(a, adapter=None, log=print):
+    log(NOTICE)
     if not a.confirm:
-        print("Refusing: pass --confirm to acknowledge the notice above."); return 2
-    stub = a.stub or os.environ.get("NXAT_STUB")
+        log("Refusing: pass --confirm to acknowledge the notice above."); return 2
+    stub = a.stub or default_stub()
     if not stub or not os.path.isfile(stub):
-        print("Installer stub (nx-app-installer.exe, built by CI) not found: pass --stub or set NXAT_STUB."); return 2
+        log("Installer stub (nx-app-installer.exe, built by CI) not found: pass --stub or set NXAT_STUB."); return 2
+    adapter = adapter if adapter is not None else load_brok(a.brok_dir)
     with tempfile.TemporaryDirectory(prefix="nxat_") as w:
         app, method = _prep(a.input, w)
         rep = A.analyze(app)
-        if rep["blockers"]:
-            print("BLOCKERS (cannot be fixed automatically):")
-            for b in rep["blockers"]:
-                print("  -", b)
-            if not a.force:
-                print("Aborting. Use --force to build anyway (the result will probably not start on Windows 7)."); return 1
+        ok, why = S.gate_translate(adapter, rep, os.path.basename(a.input))        # gate 1: cannot be skipped
+        if not ok:
+            log("BROK SUPERVISION: translation refused - %s" % why); return 3
+        log("Brok supervision: allowed (%s)" % (why or "no objection"))
         for line in D.adapt(app, rep, a.electron_zip):
-            print("  adapted:", line)
+            log("  adapted: " + line)
         after = A.analyze(app)
+        if not a.no_source_ai and (after["blockers"] or after.get("electron")):
+            dec = DC.decompile(app, after, os.path.join(w, "decompiled"))
+            for n in dec["notes"]:
+                log("  decompile: " + n)
+            if dec.get("src"):
+                log("  decompiled with %s -> %s" % (dec["tool"], dec["kind"]))
+                try:
+                    r = AG.run(dec, after, adapter, log)
+                    for n in r["notes"]:
+                        log("  agent: " + n)
+                    log("  agent: patched %s; verified=%s; assembled=%s" % (r["changed"] or "nothing", r["verified"], r["assembled"]))
+                except RuntimeError as e:
+                    log("  agent skipped: %s" % e)
+            after = A.analyze(app)
         left = {r: i["violations"] for r, i in after["pe"].items() if i["violations"]}
-        if left:
-            print("STILL INCOMPATIBLE after adaptation:", left)
-            if not a.force:
-                return 1
+        if after["blockers"] or left:
+            log("WARNING - not fixable automatically, the program will probably NOT start on Windows 7:")
+            for b in after["blockers"] + ["%s: %s" % (k, "; ".join(v)) for k, v in left.items()]:
+                log("  - " + b)
+            if a.strict:
+                log("Aborting (--strict)."); return 1
         entry = a.entry or next((r for r, i in sorted(after["pe"].items()) if r.lower().endswith(".exe") and not i["dll"]
                                  and "uninstall" not in r.lower()), None)
         if not entry:
-            print("No entry .exe found; pass --entry."); return 1
+            log("No entry .exe found; pass --entry."); return 1
         name = a.name or os.path.splitext(os.path.basename(entry))[0]
         pay = K.make_payload(app, os.path.join(w, "payload.zip"))
         out = K.build_installer(stub, pay, {"name": name, "entry": entry.replace(os.sep, "/"), "version": a.version, "publisher": a.publisher,
                                            "translated_by": "NX APP TRANSLATOR", "source": os.path.basename(a.input)}, a.output)
-        print("installer written:", out, "(static Win7 check: %s; NOT run on real Windows 7)" % ("clean" if not left else "FAILED"))
+        log("installer written: %s (static Win7 check: %s; NOT run on real Windows 7)" % (out, "clean" if not (left or after["blockers"]) else "ISSUES REMAIN"))
     return 0
 
 
-def main(argv=None):
+def build_parser():
     p = argparse.ArgumentParser(prog="nxat", description=__doc__)
     s = p.add_subparsers(dest="cmd", required=True)
     x = s.add_parser("analyze"); x.add_argument("input"); x.add_argument("--json", action="store_true"); x.set_defaults(f=cmd_analyze)
     t = s.add_parser("translate"); t.add_argument("input"); t.add_argument("-o", "--output", required=True)
     t.add_argument("--name"); t.add_argument("--entry"); t.add_argument("--version", default=""); t.add_argument("--publisher", default="")
-    t.add_argument("--stub"); t.add_argument("--electron-zip"); t.add_argument("--confirm", action="store_true"); t.add_argument("--force", action="store_true")
+    t.add_argument("--stub"); t.add_argument("--electron-zip"); t.add_argument("--confirm", "--confrim", action="store_true"); t.add_argument("--strict", action="store_true")
+    t.add_argument("--no-source-ai", action="store_true", help="skip decompile+Brok source stage (supervision stays on)"); t.add_argument("--brok-dir")
     t.set_defaults(f=cmd_translate)
-    a = p.parse_args(argv)
+    return p
+
+
+def main(argv=None):
+    a = build_parser().parse_args(argv)
     try:
         return a.f(a)
     except (U.UnpackError, FileNotFoundError) as e:
