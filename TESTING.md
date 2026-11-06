@@ -5,8 +5,11 @@ All results below come from commands actually run in this session's container
 
 | Test | Command | Environment | Result |
 |---|---|---|---|
-| Code Studio unit + offscreen GUI | `QT_QPA_PLATFORM=offscreen PYTHONPATH=nx-core:code-studio python3 -m unittest discover -s code-studio/tests -t code-studio/tests` | Python 3.12 + PySide6 6.12 | PASS (23 tests) |
-| Code Studio, LEGACY | same command in the LEGACY worktree | Python 3.8.20 + PySide2 5.15.2.1 | PASS (23 tests) |
+| NX Studio core (Python) | `cd code-studio/extensions/nx-studio/python && python3 -m unittest discover -s tests` | Python 3.12, Linux | PASS (36 tests) |
+| NX Studio extension smoke test | `node code-studio/extensions/nx-studio/test/smoke.js` | Node, Linux | PASS (25 commands registered) |
+| NX APP TRANSLATOR unit tests | `python -m unittest discover -s windows/nx-app-translator/tests` | Python 3.8.20 and 3.12, mingw-w64-built samples | PASS (11 tests each) |
+| Translated x86 + x64 programs executed | `NXAT_WINE=1 xvfb-run -a python3 -m unittest discover -s windows/nx-app-translator/tests` | Wine 9 | PASS (exit code 0; proxy only, NOT Windows 7) |
+| nxshim7.dll static Win7 check | `python3 windows/check_win7_compat.py windows/nx-app-translator/shim/bin` | pefile | PASS (OS/subsystem 6.1, no post-Win7 imports) |
 | nx-core (nxsys) | `python3 -m unittest discover -s nx-core/tests -t nx-core/tests` | Python 3.12 and 3.8 | PASS (7 tests each) |
 | nx-core feature services (34 tests, features 1-49 headless) | `python3 -m unittest discover -s nx-core/tests -t nx-core/tests` | Python 3.12 and 3.8 | PASS (34 each) |
 | Pre-existing unit tests | `python3 -m unittest discover -s tests/unit` | Python 3.12 | PASS (32 tests, 9 skipped) |
@@ -20,7 +23,7 @@ All results below come from commands actually run in this session's container
 | Full tests/unit as non-root with Brok present | same user, `unittest discover -s tests/unit` | Python 3.12 | PASS (32 tests, 4 skipped) |
 | Static check: all Python | `python3 -m pyflakes <dirs>` | local | PASS for errors (no undefined names); only unused-import warnings |
 | Shell lint as in CI | `shellcheck -S warning build/build-iso.sh installer/* tests/vm/*.sh` | local | PASS |
-| CI workflows inspected with Pipeline Lab | `nxcs.pipeline.inspect` | local | DONE: ci.yml has 4 jobs, release.yml 1; actions (checkout, upload-artifact, action-gh-release), sudo/apt/KVM steps cannot run locally -> NOT executed |
+| CI workflows inspected (YAML syntax only after the code-studio/translator edits) | PyYAML `safe_load` | local | DONE: ci.yml has 4 jobs, release.yml 1; actions (checkout, upload-artifact, action-gh-release), sudo/apt/KVM steps cannot run locally -> NOT executed |
 | Real-tool tests on virtual devices: screenshot (real PNG), display list, screen recording (real mp4), audio volume (PulseAudio null sink), cron add/list, font install/list, notification delivery (dunst), gsettings accessibility, usb/mime | `bash tests/run-real-tool-tests.sh` | Xvfb + dbus + PulseAudio + dunst in the container | **PASS** (9 tests, py3.12; also py3.8) |
 | Installer on ISO (empty-disk mode): install, refusal on non-empty disk, boot installed image BIOS/UEFI/UEFI+SecureBoot | `sudo tests/vm/test-installers.sh <iso> empty` | QEMU TCG, loop images | **PASS** (ALL INSTALLER TESTS PASSED) |
 | Installer alongside a fake-Windows GPT disk (NTFS partition byte-identical, partition rows unchanged, EFI/BOOT untouched, SecureBoot boot) | `sudo tests/vm/test-installers.sh <iso> alongside` | QEMU TCG, fake disk (NOT a real Windows install) | **PASS** |
@@ -30,7 +33,7 @@ All results below come from commands actually run in this session's container
 | GitHub Actions execution | - | - | NOT TESTED (no push access) |
 
 Known limits: the 9 skipped tests are skipped by the pre-existing suite itself (missing optional environment);
-Code Studio's GUI tests run offscreen, not on a real display.
+The NX Studio Code editor and NX APP TRANSLATOR were never run on a real Windows 7 machine.
 
 Boot tests prove only that the kernel/casper reach a login prompt in an emulator. Graphical session, installation and real hardware are NOT TESTED.
 

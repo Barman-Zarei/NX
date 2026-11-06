@@ -113,11 +113,23 @@ def _easy(path, mode):
 
 
 def _code_studio(root):
+    """Launch NX Studio Code (Electron, submodule code-studio/, branch LEGACY).
+    Looks for a built app: $NX_STUDIO_CODE_BIN, then the usual build/install locations.
+    Returns an honest error (not a crash) if no build exists yet."""
     here = os.path.dirname(os.path.abspath(__file__))
-    cs = os.path.join(os.path.dirname(os.path.dirname(here)), "code-studio")
-    env = dict(os.environ, PYTHONPATH=cs)
-    pr = subprocess.Popen([sys.executable, "-m", "nxcs.gui", root], env=env, cwd=cs)
-    return {"started_pid": pr.pid}
+    repo = os.path.dirname(os.path.dirname(here))
+    cs = os.path.join(repo, "code-studio")
+    names = ["nx-studio-code.exe", "NX Studio Code.exe", "code-oss.exe"] if os.name == "nt" else ["nx-studio-code", "code-oss"]
+    cands = [os.environ.get("NX_STUDIO_CODE_BIN", "")]
+    for base in (os.path.join(cs, ".build", "electron"), os.path.join(os.path.dirname(cs), "VSCode-win32-x64"),
+                 "/opt/nx-studio-code", os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "NX Studio Code")):
+        cands += [os.path.join(base, n) for n in names]
+    exe = next((c for c in cands if c and os.path.isfile(c)), None)
+    if not exe:
+        return {"started_pid": None, "error": "NX Studio Code is not built/installed. Build it from the code-studio submodule "
+                "(see code-studio/docs/BUILDING.md) or set NX_STUDIO_CODE_BIN."}
+    pr = subprocess.Popen([exe, root], cwd=root if os.path.isdir(root) else None)
+    return {"started_pid": pr.pid, "exe": exe}
 
 
 def _chmod(path, mode, confirm=False):

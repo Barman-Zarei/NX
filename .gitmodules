@@ -1,0 +1,4 @@
+[submodule "code-studio"]
+	path = code-studio
+	url = https://github.com/Barman-Zarei/NX-Studio-Code.git
+	branch = LEGACY

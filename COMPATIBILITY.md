@@ -2,11 +2,11 @@
 
 | Target | Status | Evidence |
 |---|---|---|
-| Code Studio core + GUI, Python 3.12 + PySide6 6.12 (Linux, offscreen) | TESTED, PASS | 23 + GUI tests |
-| Code Studio core + GUI, Python 3.8.20 + PySide2 5.15.2.1 (Linux, offscreen) | TESTED, PASS | same suite |
-| Code Studio on real Windows 7 | NOT TESTED | no Windows host; saferun is POSIX-tuned (rlimits Linux only), bash/sleep-based tests are POSIX |
-| Code Studio on Windows (any) | NOT TESTED | |
-| LEGACY GUI imports only PySide2 (never PySide6/Qt6) | PASS (static grep check) | CI step `code-studio-legacy` |
+| NX Studio Code (LEGACY, Electron 22) on real Windows 7 | NOT TESTED | upstream project states it was never booted on Win7; see code-studio/docs/LEGACY.md |
+| NX Studio layer (36 Python-core tests + extension smoke test), Linux | TESTED, PASS (3.12 locally; CI job `code-studio-legacy` uses 3.8, not yet run on GitHub) | |
+| NX APP TRANSLATOR: unit tests, Python 3.8 and 3.12 | TESTED, PASS (11) | |
+| NX APP TRANSLATOR: translated x86 + x64 sample programs executed under Wine | TESTED, PASS | proxy only: Wine implements the new APIs too |
+| NX APP TRANSLATOR / nxshim7.dll on real Windows 7 (x86 and x64) | NOT TESTED | no Windows 7 available |
 | NX ISO amd64 on QEMU BIOS/UEFI (TCG) | see TESTING.md | |
 | NX ISO inside VirtualBox/VMware on Windows 7 host, 4 GB RAM | NOT TESTED | 64-bit host + CPU virtualization needed; use dedicated virtual disk, never raw physical disks |
 | 32-bit (i386) ISO | NOT SUPPORTED | dropped by the maintainer's decision |

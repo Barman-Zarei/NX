@@ -12,3 +12,6 @@ GitHub offers no Windows 7 runner. Real Windows 7 verification = a human runs `w
 ## Known limits
 Python 3.8, Qt 5.15 and Windows 7 itself no longer get security fixes: this is a legacy edition. Newer VC++ runtimes picked up by the build may not run on Windows 7: the PE check and the Wine/real-machine tests exist to catch this.
 `main` (PySide6/Qt 6) supports Windows 10+ only. Branch policy: `LEGACY` merges `main` for everything outside `windows/`, its CI and its docs.
+
+## NX APP TRANSLATOR and NX Studio Code (LEGACY)
+`windows/nx-app-translator/` rewrites the imports/version fields of a program so it loads on Windows 7 (`nxshim7.dll`, 24 APIs) and rebuilds an installer; `code-studio/` is NX Studio Code on Electron 22.3.27. Both are **statically checked and run under Wine only**; neither has been run on a real Windows 7 machine. 32-bit (x86) translation is supported by the translator; the NX ISO itself remains 64-bit only (maintainer decision, see COMPATIBILITY.md).
