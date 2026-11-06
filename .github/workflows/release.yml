@@ -14,14 +14,15 @@ jobs:
     permissions: { contents: write }
     steps:
       - uses: actions/checkout@v4
+        with: { submodules: recursive }
       - name: Validate tag format (vMAJOR.MINOR.PATCH[-suffix])
         run: echo "$GITHUB_REF_NAME" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'
-      - name: Pre-release tests (Code Studio + unit + compatibility DB)
+      - name: Pre-release tests (NX Studio layer + unit + compatibility DB)
         run: |
           sudo apt-get update && sudo apt-get install -y git libegl1 libgl1 libxkbcommon0 libfontconfig1 libglib2.0-0 python3-gi gir1.2-gtk-3.0 xvfb
           python3 -m pip install --user --break-system-packages pyyaml PySide6-Essentials
           git config --global user.email ci@example.invalid && git config --global user.name ci
-          QT_QPA_PLATFORM=offscreen python3 -m unittest discover -s code-studio/tests
+          (cd code-studio/extensions/nx-studio/python && python3 -m unittest discover -s tests)
           xvfb-run -a python3 -m unittest discover -s tests/unit -p 'test_*.py'
           python3 compatibility/validate.py
       - run: |

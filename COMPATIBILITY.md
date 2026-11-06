@@ -2,11 +2,7 @@
 
 | Target | Status | Evidence |
 |---|---|---|
-| Code Studio core + GUI, Python 3.12 + PySide6 6.12 (Linux, offscreen) | TESTED, PASS | 23 + GUI tests |
-| Code Studio core + GUI, Python 3.8.20 + PySide2 5.15.2.1 (Linux, offscreen) | TESTED, PASS | same suite |
-| Code Studio on real Windows 7 | NOT TESTED | no Windows host; saferun is POSIX-tuned (rlimits Linux only), bash/sleep-based tests are POSIX |
-| Code Studio on Windows (any) | NOT TESTED | |
-| LEGACY GUI imports only PySide2 (never PySide6/Qt6) | PASS (static grep check) | CI step `code-studio-legacy` |
+| NX Studio layer (36 Python-core tests + extension smoke test), Linux, Python 3.12 | TESTED, PASS | CI job `code-studio` not yet run on GitHub |
 | NX ISO amd64 on QEMU BIOS/UEFI (TCG) | see TESTING.md | |
 | NX ISO inside VirtualBox/VMware on Windows 7 host, 4 GB RAM | NOT TESTED | 64-bit host + CPU virtualization needed; use dedicated virtual disk, never raw physical disks |
 | 32-bit (i386) ISO | NOT SUPPORTED | dropped by the maintainer's decision |

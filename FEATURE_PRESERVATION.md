@@ -61,4 +61,4 @@ Most of features 1-49 did NOT exist in the repository before this work; they are
 | 47 | Share Sheet | PARTIALLY IMPLEMENTED (service + Control Center page) | sysfeatures_c.py share_targets/share_email | target discovery + mail command |
 | 48 | Accessibility Toolkit | IMPLEMENTED AND TESTED against real tools on VIRTUAL devices (Xvfb / PulseAudio null sink / cron / dunst); physical hardware NOT TESTED | sysfeatures_c.py a11y_status | reads GNOME gsettings if present; no toolkit UI |
 | 49 | USB Manager | IMPLEMENTED AND TESTED against real tools on VIRTUAL devices (Xvfb / PulseAudio null sink / cron / dunst); physical hardware NOT TESTED | sysfeatures_c.py usb_devices/safe_to_eject | lists devices, refuses system disks; no real USB tested |
-| 50 | NX Code Studio | PARTIALLY IMPLEMENTED | code-studio/ (see FEATURES.md module table) | many modules incomplete |
+| 50 | NX Studio Code | PARTIALLY IMPLEMENTED | code-studio/ (submodule of NX-Studio-Code) | editor build not verified here; see FEATURES.md |

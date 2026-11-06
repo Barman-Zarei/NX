@@ -66,7 +66,7 @@ NX/
 ├── installer/            # Installation-related components
 ├── desktop/overlay/      # Desktop overlay-related components
 ├── software-center/      # Software-management-related development
-├── code-studio/          # Code-editor-related component
+├── code-studio/          # NX Studio Code (git submodule: Barman-Zarei/NX-Studio-Code, branch main); clone with --recurse-submodules
 ├── ai/                   # AI-related code and planned integration
 ├── windows/media-tool/   # Windows ISO checksum utility
 ├── compatibility/        # Compatibility resources

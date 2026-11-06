@@ -23,15 +23,22 @@ jobs:
           python3 -m uv venv --python 3.12 /tmp/v312
           python3 -m uv pip install --python /tmp/v312/bin/python PySide6-Essentials
           /tmp/v312/bin/python -m unittest tests.unit.test_gui_offscreen -v
-  code-studio:   # Feature 50 core + GUI, offscreen. Main branch = Python 3.12 + PySide6.
+  code-studio:   # Feature 50 on main: NX Studio Code (submodule code-studio/, branch main): NX layer tests, no editor build.
     runs-on: ubuntu-24.04
     permissions: { contents: read }
     steps:
       - uses: actions/checkout@v4
-      - run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libfontconfig1 libglib2.0-0 git
-      - run: python3 -m pip install --user --break-system-packages pyyaml PySide6-Essentials
-      - name: NX Code Studio tests (headless core + offscreen GUI)
-        run: git config --global user.email ci@example.invalid && git config --global user.name ci && QT_QPA_PLATFORM=offscreen python3 -m unittest discover -s code-studio/tests -v
+        with: { submodules: recursive }
+      - name: Submodule is on the main branch of NX-Studio-Code
+        run: git -C code-studio branch -r --contains HEAD | grep -q 'origin/main'
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - name: NX Studio core (Python, stdlib only)
+        run: git config --global user.email ci@example.invalid && git config --global user.name ci && cd code-studio/extensions/nx-studio/python && python -m unittest discover -s tests -v
+      - name: NX Studio extension smoke test (fake VS Code API + real core)
+        run: node code-studio/extensions/nx-studio/test/smoke.js
   iso-and-vm-tests:
     needs: lint-unit
     runs-on: ubuntu-24.04
