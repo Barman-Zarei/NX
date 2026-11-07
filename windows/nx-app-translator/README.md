@@ -12,9 +12,9 @@ tools (PyInstaller-frozen stub, `check_win7_compat.py`, PE tooling). Python 3.8 
    **Fail closed:** Brok missing, timed out, or unclear -> translation refused. There is no flag to skip supervision.
 2. **Adapt (binary level):** the fixes in the table below.
 3. **Decompile:** Electron `app.asar` (built in), .NET via `ilspycmd`, native via `retdec-decompiler` when installed. Otherwise: no source, stays at step 2.
-4. **Brok + NX Studio Code loop (up to 3 rounds):** Brok only *proposes* whole-file edits as JSON; **Gate 2** reviews the diff (rules + Brok) before anything is written; NX Studio Code's core applies it (conflict-safe patch apply) and checks with allowlisted commands under Safe Run (`node --check` for JS, mingw `-fsyntax-only` for C). Verified Electron source is repacked into `app.asar`; for .NET/native the edited source stays in the workspace (no automatic rebuild yet).
+4. **Brok + NX Studio Code loop (up to 3 rounds):** Brok only *proposes* whole-file edits as JSON; **Gate 2** reviews the diff (rules + Brok) before anything is written; NX Studio Code's core applies it (conflict-safe patch apply) and checks with allowlisted commands under Safe Run (`node --check` for JS, mingw `-fsyntax-only` for C). Verified Electron source is repacked into `app.asar`; verified native C is rebuilt with mingw-w64 (Windows 7 target) and re-checked/patched; for .NET the edited source stays in the workspace (no automatic rebuild: needs NuGet/SDK access).
 5. **Pack** the installer. Remaining problems are printed as a loud WARNING (`--strict` aborts instead).
-Every decision is appended to an audit log (`$NXAT_AUDIT_LOG`, default `~/.local/share/nx-ai/nxat-audit.jsonl`). The installer stub comes from CI (`nx-app-installer.exe`, put it at `/usr/share/nx/` or set `NXAT_STUB`). Digital signatures are dropped (accepted).
+Every decision is appended to an audit log (`$NXAT_AUDIT_LOG`, default `~/.local/share/nx-ai/nxat-audit.jsonl`). The installer stub is **native C** (`stub/nxstub.c` + miniz, no Python or runtime needed on the target; x86 build runs on 32- and 64-bit Windows 7+). Build it with `sh stub/build.sh`; `translate` finds `stub/bin/x86/nx-app-installer.exe` automatically (or `NXAT_STUB`, `/usr/share/nx/`). Digital signatures are dropped (accepted).
 Supervision lowers abuse; it cannot guarantee it - heuristics and an LLM can both be wrong.
 
 Pipeline: **unpack** (folder, zip, `.asar`, MSI/NSIS/SFX via 7-Zip, Inno via innoextract) -> **analyze** -> **adapt** -> **re-analyze (static Win7 check)**
@@ -38,8 +38,8 @@ CompareObjectHandles -> handle equality; VirtualAlloc2/MapViewOfFile3 -> only th
   it fixes the *loader-level* incompatibilities above. Apps that call newer APIs dynamically (GetProcAddress) or need new OS features will still fail at run time.
 * Modified binaries **lose their digital signature** (accepted by the maintainer); self-checking programs may refuse to run.
 * `--confirm` acknowledges the notice; Brok supervision (above) is what actually gates abuse. Do not redistribute translated third-party software.
-* **Verification status:** 25 unit tests pass on Python 3.8 and 3.12 (supervision and the agent loop are tested with a FAKE Brok - the real Brok with a real model was **not** run); translated sample x86 and x64 programs were **executed under Wine** (proxy: Wine also implements the newer APIs). **Never run on real Windows 7.**
-* Delay-load imports are not rewritten. Installer stub needs Python-3.8-frozen prerequisites on Win7: SP1 + KB2999226 (UCRT).
+* **Verification status:** 25 unit tests pass on Python 3.8 and 3.12 (supervision and the agent loop use a FAKE Brok; the REAL Brok repo + adapter was run once without a model and correctly made gate 1 refuse - a real model was **not** available); translated sample x86 and x64 programs, the native installer (install, shortcut, registry, uninstall, corrupt/zip-slip refusal) and a real Electron 30 -> 22.3.27 swap (the swapped runtime started and ran our repacked `app.asar`) were **executed under Wine** (proxy: Wine also implements the newer APIs). **Never run on real Windows 7.**
+* Delay-load imports are not rewritten. The native stub needs nothing beyond Windows 7 SP1 (it links statically; only system DLLs).
 
 ## Build
 `sh shim/build.sh` (mingw-w64) -> `shim/bin/{x64,x86}/nxshim7.dll`; CI builds `nx-app-translator.exe` and `nx-app-installer.exe` (the stub) with PyInstaller 5.13.2.

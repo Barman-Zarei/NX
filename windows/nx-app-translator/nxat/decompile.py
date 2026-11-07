@@ -43,7 +43,7 @@ def decompile(root, rep, out):
             dst = os.path.join(out, "native-c"); os.makedirs(dst, exist_ok=True)
             rc, tail = _run(["retdec-decompiler", "-o", os.path.join(dst, "out.c"), os.path.join(root, rel)])
             if rc == 0:
-                res.update(kind="native-c", src=dst, tool="retdec"); return res
+                res.update(kind="native-c", src=dst, tool="retdec", exe=os.path.join(root, rel), arch=info["arch"]); return res
             res["notes"].append("retdec failed: " + tail)
     res["notes"].append("no decompiler available for this app (install ilspycmd for .NET or retdec for native code)")
     return res

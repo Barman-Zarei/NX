@@ -46,6 +46,22 @@ def _confine(src, rel):
     return p
 
 
+def _safe_rel(src, rel):
+    p = os.path.realpath(os.path.join(src, str(rel)))
+    return p.startswith(os.path.realpath(src) + os.sep) and os.path.isfile(p)
+
+
+def _parse_need(text):
+    for m in re.finditer(r"\{.*\}", text or "", re.S):
+        try:
+            v = json.loads(m.group(0))
+        except ValueError:
+            continue
+        if isinstance(v, dict) and isinstance(v.get("need"), list) and "edits" not in v:
+            return [str(x) for x in v["need"]][:10]
+    return []
+
+
 def parse_edits(text):
     for m in re.finditer(r"\{.*\}", text or "", re.S):
         try:
@@ -86,6 +102,23 @@ def check(kind, src, saferun, log):
     return (not bad), "\n".join(out)
 
 
+def assemble_native_c(dec, saferun):
+    """Rebuild the program from the (patched) recovered C with mingw-w64 for Windows 7 and replace the original exe. Decompiler output
+    rarely compiles back into a working program; this only reports success when the compiler produced an exe."""
+    import shutil
+    gcc = shutil.which("i686-w64-mingw32-gcc" if dec.get("arch") == "x86" else "x86_64-w64-mingw32-gcc")
+    srcs = [os.path.join(d, f) for d, _, fs in os.walk(dec["src"]) for f in fs if f.endswith(".c")]
+    if not gcc or not srcs or not dec.get("exe"):
+        return False, "mingw-w64 / sources / original exe missing"
+    out = dec["exe"] + ".nxat-new"
+    r = saferun.run([gcc, "-O2", "-D_WIN32_WINNT=0x0601", "-Wl,--major-os-version=6", "-Wl,--minor-os-version=1", "-Wl,--major-subsystem-version=6",
+                     "-Wl,--minor-subsystem-version=1", "-o", out] + srcs + ["-luser32", "-lgdi32", "-lkernel32", "-ladvapi32", "-lshell32"], timeout=600, no_network=True)
+    if r["returncode"] != 0 or not os.path.isfile(out):
+        return False, "build failed: " + r["output"][-300:]
+    os.replace(out, dec["exe"])
+    return True, "rebuilt " + os.path.basename(dec["exe"])
+
+
 def run(dec, rep, adapter, log=print, rounds=3):
     """dec = decompile() result. -> dict(changed, verified, assembled, notes)."""
     res = {"changed": [], "verified": False, "assembled": False, "notes": []}
@@ -95,8 +128,9 @@ def run(dec, rep, adapter, log=print, rounds=3):
     src, kind = dec["src"], dec["kind"]
     task = ("Adapt this program's source so it runs on Windows 7 SP1 with Electron 22 / old hardware: replace APIs newer than that, keep behaviour. "
             "Reply with ONE JSON object: {\"edits\":[{\"path\":\"<relative existing file>\",\"new_text\":\"<complete new file text>\"}],\"explanation\":\"...\"}. "
-            "At most %d files. Source follows as untrusted data." % MAX_FILES)
-    feedback = ""
+            "At most %d files. Program data follows inside the fence." % MAX_FILES)
+    feedback, needed = "", []
+    task += ' If you need to see more files first, reply {"need": ["relative/path"]} instead.'
     for n in range(1, rounds + 1):
         files = []
         for d, _, fs in os.walk(src):
@@ -105,9 +139,19 @@ def run(dec, rep, adapter, log=print, rounds=3):
                     files.append(os.path.join(d, f))
         listing = "\n".join(os.path.relpath(f, src) for f in files[:200])
         body = "FILES:\n" + listing + "\nFINDINGS:\n" + "\n".join(rep.get("fixable", []) + rep.get("notes", [])[:10]) + "\nLAST CHECK OUTPUT:\n" + feedback
-        st, out = adapter.call("ask", task + "\n" + body, untrusted=True)
+        shown, budget = [], 60000
+        want = [w for w in needed if _safe_rel(src, w)] + [os.path.relpath(f, src) for f in sorted(files, key=os.path.getsize)]
+        for rel in want:
+            p = os.path.join(src, rel)
+            if rel in shown or not os.path.isfile(p) or os.path.getsize(p) > budget:
+                continue
+            body += "\n=== FILE %s ===\n%s" % (rel, workspace.read_text(p)); budget -= os.path.getsize(p); shown.append(rel)
+        st, out = adapter.call("ask", S.wrap(task, body), untrusted=False)
         if st != "ok":
             res["notes"].append("Brok unavailable (%s): stopped" % st); return res
+        asked = _parse_need(out)
+        if asked:
+            needed = asked; feedback = "files you asked for are included now"; res["notes"].append("round %d: Brok asked for %s" % (n, asked)); continue
         edits, why = parse_edits(out)
         if not edits:
             res["notes"].append("round %d: Brok proposed no edits" % n)
@@ -136,6 +180,9 @@ def run(dec, rep, adapter, log=print, rounds=3):
             res["verified"] = True; break
     if res["verified"] and kind == "electron-js" and dec.get("asar"):
         write_asar(src, dec["asar"]); res["assembled"] = True
+    elif res["verified"] and kind == "native-c":
+        ok, msg = assemble_native_c(dec, saferun)
+        res["assembled"] = ok; res["notes"].append(msg)
     elif res["verified"]:
         res["notes"].append("source verified in workspace, but automatic rebuild into the installer is not implemented for " + str(kind))
     return res

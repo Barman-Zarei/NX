@@ -23,7 +23,10 @@ def load_brok(brok_dir=None):
 
 
 def default_stub():
-    for c in (os.environ.get("NXAT_STUB", ""), "/usr/share/nx/nx-app-installer.exe", os.path.join(os.path.dirname(os.path.abspath(__file__)), "nx-app-installer.exe")):
+    here = os.path.dirname(os.path.abspath(__file__))
+    # x86 stub first: it runs on 32- and 64-bit Windows 7+
+    for c in (os.environ.get("NXAT_STUB", ""), os.path.join(here, "..", "stub", "bin", "x86", "nx-app-installer.exe"),
+              "/usr/share/nx/nx-app-installer.exe", os.path.join(here, "nx-app-installer.exe")):
         if c and os.path.isfile(c):
             return c
     return None
@@ -84,6 +87,9 @@ def cmd_translate(a, adapter=None, log=print):
                     log("  agent: patched %s; verified=%s; assembled=%s" % (r["changed"] or "nothing", r["verified"], r["assembled"]))
                 except RuntimeError as e:
                     log("  agent skipped: %s" % e)
+            after = A.analyze(app)
+            for line in D.adapt(app, after, a.electron_zip):          # re-check after source changes / native rebuild
+                log("  adapted: " + line)
             after = A.analyze(app)
         left = {r: i["violations"] for r, i in after["pe"].items() if i["violations"]}
         if after["blockers"] or left:

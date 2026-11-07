@@ -2,6 +2,8 @@
 import json, os, re
 from . import peutil as P
 
+# Microsoft redistributables whose header says 10.0 but which are documented to run on Windows 7 SP1 (shipped inside Electron 22 itself)
+KNOWN_WIN7_OK = {"d3dcompiler_47.dll"}
 ELECTRON_WIN7_MAX = 22      # Electron 23+ dropped Windows 7
 PY_WIN7_MAX = (3, 8)        # CPython 3.9+ dropped Windows 7
 DOTNET_WIN7_MAX = 6         # .NET 7+ dropped Windows 7 (6 is out of support but runs)
@@ -58,6 +60,8 @@ def analyze(root):
                 continue
             imp = [n for dll, ns in info["imports"] if dll.lower() != P.SHIM_DLL for n in ns]
             viol = P.W7.violations(info["os"], info["subsystem"], imp)
+            if low in KNOWN_WIN7_OK:
+                viol = [v for v in viol if "version" not in v]
             post = sorted(set(imp) & P.W7.POST_WIN7)
             info["post_win7"] = post
             info["unshimmable"] = [n for n in post if n not in P.SHIMMED]

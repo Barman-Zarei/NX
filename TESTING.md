@@ -7,7 +7,7 @@ All results below come from commands actually run in this session's container
 |---|---|---|---|
 | NX Studio core (Python) | `cd code-studio/extensions/nx-studio/python && python3 -m unittest discover -s tests` | Python 3.12, Linux | PASS (36 tests) |
 | NX Studio extension smoke test | `node code-studio/extensions/nx-studio/test/smoke.js` | Node, Linux | PASS (25 commands registered) |
-| NX APP TRANSLATOR unit tests | `python -m unittest discover -s windows/nx-app-translator/tests` | Python 3.8.20 and 3.12, mingw-w64-built samples | PASS (25 tests each; supervision/agent use a FAKE Brok, real Brok+model NOT run) |
+| NX APP TRANSLATOR unit tests | `python -m unittest discover -s windows/nx-app-translator/tests` | Python 3.8.20 and 3.12, mingw-w64-built samples | PASS (30 tests; supervision/agent use a FAKE Brok; real Brok repo run without a model = fail-closed confirmed; real model NOT run) |
 | Translated x86 + x64 programs executed | `NXAT_WINE=1 xvfb-run -a python3 -m unittest discover -s windows/nx-app-translator/tests` | Wine 9 | PASS (exit code 0; proxy only, NOT Windows 7) |
 | nxshim7.dll static Win7 check | `python3 windows/check_win7_compat.py windows/nx-app-translator/shim/bin` | pefile | PASS (OS/subsystem 6.1, no post-Win7 imports) |
 | nx-core (nxsys) | `python3 -m unittest discover -s nx-core/tests -t nx-core/tests` | Python 3.12 and 3.8 | PASS (7 tests each) |

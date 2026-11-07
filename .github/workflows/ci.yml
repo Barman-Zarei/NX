@@ -54,10 +54,13 @@ jobs:
           sudo apt-get install -y gcc-mingw-w64-x86-64 gcc-mingw-w64-i686 wine wine64 wine32:i386 xvfb p7zip-full
           python -m pip install pefile
       - run: sh windows/nx-app-translator/shim/build.sh
-      - run: python windows/check_win7_compat.py windows/nx-app-translator/shim/bin
+      - run: sh windows/nx-app-translator/stub/build.sh
+      - run: python windows/check_win7_compat.py windows/nx-app-translator/shim/bin windows/nx-app-translator/stub/bin
       - run: NXAT_WINE=1 xvfb-run -a python -m unittest discover -s windows/nx-app-translator/tests -v
       - uses: actions/upload-artifact@v4
         with: { name: nxshim7, path: windows/nx-app-translator/shim/bin }
+      - uses: actions/upload-artifact@v4
+        with: { name: nx-app-installer, path: windows/nx-app-translator/stub/bin }
   windows-build-test:
     needs: [lint-unit, app-translator]
     runs-on: windows-2022
@@ -78,12 +81,11 @@ jobs:
         run: |
           pyinstaller --noconfirm --clean --onedir --name nx-media-tool-cli --paths windows/media-tool windows/media-tool/nxverify.py
           pyinstaller --noconfirm --clean --onedir --windowed --name nx-media-tool --paths windows/media-tool windows/media-tool/gui.py
-      - name: Build NX APP TRANSLATOR (onedir, with shim DLLs) and the installer stub (onefile)
+      - name: Build NX APP TRANSLATOR analyze tool (onedir, with shim DLLs); the installer stub is native C, built in job app-translator
         run: |
           pyinstaller --noconfirm --onedir --name nx-app-translator --paths windows --paths windows/nx-app-translator --add-data "windows/nx-app-translator/shim/bin;shim/bin" windows/nx-app-translator/nxat_main.py
-          pyinstaller --noconfirm --onefile --windowed --name nx-app-installer --paths windows/nx-app-translator windows/nx-app-translator/nxat/installer_stub.py
       - name: Smoke test translator exe
-        run: dist\nx-app-translator\nx-app-translator.exe analyze dist\nx-app-installer.exe
+        run: dist\nx-app-translator\nx-app-translator.exe analyze windows\nx-app-translator\shim\bin\x64\nxshim7.dll
       - name: Smoke test CLI exe (match and mismatch)
         shell: pwsh
         run: |

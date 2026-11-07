@@ -25,8 +25,20 @@ SRC = r"""#define _WIN32_WINNT 0x0A00
 #include <windows.h>
 int main(void){ FILETIME f; GetSystemTimePreciseAsFileTime(&f); volatile LONG v=1; LONG c=2; WaitOnAddress(&v,&c,4,10); return GetDpiForSystem()>0?0:1; }
 """
-CC = {"x64": "x86_64-w64-mingw32-gcc", "x86": "i686-w64-mingw32-gcc"}
+CC = {"x64": shutil.which("x86_64-w64-mingw32-gcc") or "x86_64-w64-mingw32-gcc", "x86": shutil.which("i686-w64-mingw32-gcc") or "i686-w64-mingw32-gcc"}
 SHIM = {a: os.path.join(HERE, "..", "shim", "bin", a, "nxshim7.dll") for a in CC}
+
+
+_WP = []
+
+
+def wine_env():
+    """One shared Wine prefix for the whole test run, removed at exit (a prefix is ~600 MB)."""
+    import atexit
+    if not _WP:
+        d = tempfile.mkdtemp(prefix="nxat_wine_"); _WP.append(d)
+        atexit.register(shutil.rmtree, d, True)
+    return dict(os.environ, WINEDEBUG="-all", WINEPREFIX=_WP[0])
 
 
 def build_sample(tmp, arch):
@@ -128,7 +140,7 @@ class WithCompiler(unittest.TestCase):
                          ["GetDpiForSystem", "GetSystemTimePreciseAsFileTime", "WaitOnAddress"])
         wine = shutil.which("wine")
         if wine and os.environ.get("NXAT_WINE") == "1":
-            env = dict(os.environ, WINEDEBUG="-all", WINEPREFIX=os.path.join(t, "wp"))
+            env = wine_env()
             self.assertEqual(subprocess.run([wine, os.path.join(app, os.path.basename(exe))], env=env, timeout=180).returncode, 0)
 
     def test_x64(self): self._run("x64")
@@ -196,9 +208,9 @@ class Supervision(unittest.TestCase):
         self.assertFalse(S.gate_translate(b, self._rep(pe=pe), "app.exe")[0])
         self.assertEqual(b.calls, [])                      # Brok was never even asked
 
-    def test_app_content_is_sent_as_untrusted(self):
+    def test_app_content_is_fenced_as_untrusted_data(self):
         b = FakeBrok(); S.gate_translate(b, self._rep(), "a.exe")
-        self.assertTrue(all(c[1] for c in b.calls))
+        self.assertTrue(all("<<<DATA-" in c[2] and not c[1] for c in b.calls))   # instructions outside the fence; text-only ask mode
 
     def test_dangerous_patch_blocked_by_rules(self):
         d = "--- a/m.js\n+++ b/m.js\n+require('child_process').exec('powershell -enc AAAA')\n"
@@ -246,6 +258,14 @@ class Agent(unittest.TestCase):
         U.read_asar(asar, os.path.join(t, "o2"))
         self.assertIn("console.log(x)", open(os.path.join(t, "o2", "main.js")).read())
 
+    def test_brok_receives_file_contents_and_can_ask_for_more(self):
+        from nxat import agent as AG, decompile as DC
+        t = tempfile.mkdtemp(); self._electron(t, "const SECRET_MARKER = 1;\n")
+        rep = A.analyze(os.path.join(t, "app")); dec = DC.decompile(os.path.join(t, "app"), rep, os.path.join(t, "dec"))
+        b = FakeBrok(edits=json.dumps({"need": ["main.js"]}))
+        AG.run(dec, rep, b, log=lambda *_: None, rounds=2)
+        self.assertTrue(any("SECRET_MARKER" in c[2] and "=== FILE main.js ===" in c[2] for c in b.calls))
+
     def test_path_escape_and_new_files_rejected(self):
         from nxat import agent as AG, decompile as DC
         t = tempfile.mkdtemp(); self._electron(t, "1;\n")
@@ -262,3 +282,77 @@ class Agent(unittest.TestCase):
         b = FakeBrok(['{"allow": false, "reason": "suspicious"}'], edits=fix)
         r = AG.run(dec, rep, b, log=lambda *_: None)
         self.assertEqual(r["changed"], []); self.assertEqual(open(os.path.join(dec["src"], "main.js")).read(), "1;\n")
+
+
+STUB = os.path.join(HERE, "..", "stub", "bin", "x86", "nx-app-installer.exe")
+
+
+@unittest.skipUnless(shutil.which("wine") and os.path.isfile(STUB) and os.environ.get("NXAT_WINE") == "1", "needs wine, built stub, NXAT_WINE=1")
+class NativeStub(unittest.TestCase):
+    def _wine(self, *a):
+        return subprocess.run(["xvfb-run", "-a", "wine"] + list(a), env=wine_env(), timeout=300, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+
+    def _pkg(self, t, files, name="Demo App"):
+        app = os.path.join(t, "app"); os.makedirs(app, exist_ok=True)
+        for rel, data in files.items():
+            os.makedirs(os.path.dirname(os.path.join(app, rel)) or app, exist_ok=True)
+            open(os.path.join(app, rel), "wb").write(data)
+        z = K.make_payload(app, os.path.join(t, "p.zip"))
+        return K.build_installer(STUB, z, {"name": name, "entry": "main.exe", "version": "1.2", "publisher": "Me"}, os.path.join(t, "setup.exe"))
+
+    def _c(self, rel):
+        return os.path.join(wine_env()["WINEPREFIX"], "drive_c", rel)
+
+    def test_install_registry_shortcut_uninstall(self):
+        t = tempfile.mkdtemp(); pkg = self._pkg(t, {"main.exe": b"MZ", "sub/h\u00e9llo.txt": "h\u00e9llo".encode("utf8")})
+        r = self._wine(pkg, "--silent", "--dir", "C:\\nxat_t\\Demo"); self.assertEqual(r.returncode, 0, r.stdout)
+        root = self._c("nxat_t/Demo")
+        self.assertTrue(os.path.isfile(os.path.join(root, "uninstall.exe")))
+        self.assertEqual(open(os.path.join(root, "sub", "h\u00e9llo.txt"), "rb").read().decode("utf8"), "h\u00e9llo")
+        key = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\NXAT_Demo App"
+        q = self._wine("reg", "query", key); self.assertIn(b"Demo App (NX Win7)", q.stdout)
+        self.assertEqual(self._wine(os.path.join(root, "uninstall.exe"), "--uninstall", "C:\\nxat_t\\Demo", "--silent").returncode, 0)
+        import time
+        for _ in range(30):
+            if not os.path.exists(root): break
+            time.sleep(1)
+        self.assertFalse(os.path.exists(root))
+        self.assertNotIn(b"Demo App (NX Win7)", self._wine("reg", "query", key).stdout)   # real name recovered despite custom --dir
+
+    def test_corrupt_payload_refused_nothing_written(self):
+        t = tempfile.mkdtemp(); pkg = self._pkg(t, {"main.exe": b"MZ" * 5000})
+        b = bytearray(open(pkg, "rb").read()); b[os.path.getsize(STUB) + 10] ^= 0xFF; open(pkg, "wb").write(b)
+        r = self._wine(pkg, "--silent", "--dir", "C:\\nxat_t\\Bad"); self.assertNotEqual(r.returncode, 0)
+        self.assertFalse(os.path.exists(self._c("nxat_t/Bad/main.exe")))
+
+    def test_zip_slip_refused(self):
+        import hashlib
+        t = tempfile.mkdtemp(); zp = os.path.join(t, "evil.zip")
+        with zipfile.ZipFile(zp, "w") as z:
+            z.writestr("main.exe", b"MZ"); z.writestr("../escaped.txt", b"x")
+        pkg = K.build_installer(STUB, zp, {"name": "Evil", "entry": "main.exe"}, os.path.join(t, "setup.exe"))
+        r = self._wine(pkg, "--silent", "--dir", "C:\\nxat_t\\Evil\\in"); self.assertNotEqual(r.returncode, 0)
+        self.assertFalse(os.path.exists(self._c("nxat_t/Evil/escaped.txt")))
+
+
+@unittest.skipUnless(shutil.which("x86_64-w64-mingw32-gcc"), "mingw missing")
+class NativeRebuild(unittest.TestCase):
+    def test_c_source_rebuilt_for_win7(self):
+        from nxat import agent as AG
+        studio_patch, saferun, workspace = __import__("nxat.studio", fromlist=["load"]).load()
+        t = tempfile.mkdtemp(); src = os.path.join(t, "src"); os.makedirs(src)
+        open(os.path.join(src, "m.c"), "w").write("#include <windows.h>\nint main(void){ return GetDpiForSystem() ? 0 : 1; }\n")
+        exe = os.path.join(t, "app.exe"); open(exe, "wb").write(b"old")
+        # compiling cannot prove Win7 compatibility (mingw declares newer APIs anyway): the post-build static check + adapt must catch it
+        ok, msg = AG.assemble_native_c({"src": src, "exe": exe, "arch": "x64"}, saferun)
+        self.assertTrue(ok, msg)
+        rep = A.analyze(os.path.dirname(exe))
+        self.assertFalse(rep["compatible_now"])
+        self.assertTrue(any("GetDpiForSystem" in v for i in rep["pe"].values() for v in i["violations"]))
+        self.assertTrue(D.adapt(os.path.dirname(exe), rep) if have("x64") else True)
+        if have("x64"):
+            self.assertTrue(A.analyze(os.path.dirname(exe))["pe"]["app.exe"]["violations"] == [])
+        open(os.path.join(src, "m.c"), "w").write("#include <windows.h>\nint main(void){ return GetSystemMetrics(0) ? 0 : 1; }\n")
+        ok, msg = AG.assemble_native_c({"src": src, "exe": exe, "arch": "x64"}, saferun)
+        self.assertTrue(ok, msg)
+        info = P.read_info(exe); self.assertEqual(info["os"], (6, 1)); self.assertEqual(info["subsystem"], (6, 1))
