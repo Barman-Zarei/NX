@@ -1,6 +1,6 @@
 """Scan an app folder and classify what keeps it from running on Windows 7 SP1, and what can be fixed automatically."""
 import json, os, re
-from . import peutil as P
+from . import peutil as P, dotnet as DN
 
 # Microsoft redistributables whose header says 10.0 but which are documented to run on Windows 7 SP1 (shipped inside Electron 22 itself)
 KNOWN_WIN7_OK = {"d3dcompiler_47.dll"}
@@ -45,7 +45,11 @@ def analyze(root):
                     v = int(str(fw.get("version", "0")).split(".")[0])
                     rep["kinds"].append("dotnet-core")
                     if v > DOTNET_WIN7_MAX and "NETCore" in fw.get("name", ""):
-                        rep["blockers"].append("%s targets .NET %d (no Windows 7 support); rebuild from source for net6.0 or older" % (rel, v))
+                        if DN.dnfile is None:
+                            rep["blockers"].append("%s targets .NET %d (no Windows 7 support); install `dnfile` for the experimental downgrade or rebuild for net6.0" % (rel, v))
+                        else:
+                            rep["fixable"].append("dotnet-downgrade (EXPERIMENTAL): %s targets .NET %d -> re-point to 6.0; works only if no API newer than .NET 6 is used" % (rel, v))
+                            rep.setdefault("dotnet", []).append({"config": rel, "major": v})
                 except (ValueError, OSError):
                     pass
             m = re.match(r"^python3(\d+)\.dll$", low)

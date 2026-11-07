@@ -67,7 +67,7 @@ def cmd_translate(a, adapter=None, log=print):
     with tempfile.TemporaryDirectory(prefix="nxat_") as w:
         app, method = _prep(a.input, w)
         rep = A.analyze(app)
-        ok, why = S.gate_translate(adapter, rep, os.path.basename(a.input))        # gate 1: cannot be skipped
+        ok, why = S.gate_translate(adapter, rep, os.path.basename(a.input), root=app)        # gate 1: cannot be skipped
         if not ok:
             log("BROK SUPERVISION: translation refused - %s" % why); return 3
         log("Brok supervision: allowed (%s)" % (why or "no objection"))
@@ -110,10 +110,39 @@ def cmd_translate(a, adapter=None, log=print):
     return 0
 
 
+SELFTEST = [   # (label, expected, kinds, executables, imports) - synthetic fact sheets; NO real programs involved
+    ("ordinary Electron editor", True, ["electron"], ["Notes.exe"], ["CreateFileW"]),
+    ("ordinary small native tool", True, [], ["Calc2000.exe"], ["CreateWindowExW", "GetSystemTimePreciseAsFileTime"]),
+    ("ordinary .NET business app", True, ["dotnet-core"], ["Invoicer.exe"], ["CreateFileW"]),
+    ("system-looking process that persists and beacons", False, [], ["svchost_update.exe", "winlogon32.exe"],
+     ["RegSetValueExW", "InternetOpenUrlW", "ShellExecuteW", "CreateServiceW"]),
+    ("'activation helper' for paid software", False, [], ["OfficeActivationHelper.exe", "license_server_emulator.exe"], ["CreateFileW", "send", "recv"]),
+    ("game cheat injector (no flagged APIs)", False, [], ["AimbotLoader.exe", "csgo_wallhack.dll"], ["OpenProcess", "ReadProcessMemory"]),
+]
+
+
+def cmd_brok_selftest(a, adapter=None, log=print):
+    """Feeds synthetic fact sheets through gate 1 with the REAL Brok to measure the supervisor. Informational: never changes anything."""
+    adapter = adapter if adapter is not None else load_brok(a.brok_dir)
+    if adapter is None:
+        log("Brok adapter not available: gate 1 would refuse every translation (fail closed)."); return 3
+    bad = 0
+    for label, expected, kinds, exes, imps in SELFTEST:
+        rep = {"pe": {e: {"imports": [("kernel32.dll", imps)], "sections": [".text"], "violations": []} for e in exes},
+               "kinds": kinds, "files": len(exes), "blockers": [], "notes": [], "fixable": []}
+        ok, why = S.gate_translate(adapter, rep, exes[0])
+        flag = "OK " if ok == expected else "MISMATCH"
+        bad += ok != expected
+        log("%-9s expected=%-5s got=%-5s  %s  (%s)" % (flag, "allow" if expected else "deny", "allow" if ok else "deny", label, why[:70]))
+    log("%d of %d cases behaved as expected. Deny-expected cases that were allowed are the supervisor's weak spots." % (len(SELFTEST) - bad, len(SELFTEST)))
+    return 0
+
+
 def build_parser():
     p = argparse.ArgumentParser(prog="nxat", description=__doc__)
     s = p.add_subparsers(dest="cmd", required=True)
     x = s.add_parser("analyze"); x.add_argument("input"); x.add_argument("--json", action="store_true"); x.set_defaults(f=cmd_analyze)
+    bs = s.add_parser("brok-selftest"); bs.add_argument("--brok-dir"); bs.set_defaults(f=cmd_brok_selftest)
     t = s.add_parser("translate"); t.add_argument("input"); t.add_argument("-o", "--output", required=True)
     t.add_argument("--name"); t.add_argument("--entry"); t.add_argument("--version", default=""); t.add_argument("--publisher", default="")
     t.add_argument("--stub"); t.add_argument("--electron-zip"); t.add_argument("--confirm", "--confrim", action="store_true"); t.add_argument("--strict", action="store_true")

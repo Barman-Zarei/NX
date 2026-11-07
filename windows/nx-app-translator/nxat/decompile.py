@@ -7,8 +7,23 @@ import os, shutil, subprocess
 from . import unpack as U
 
 
+EXTRA_PATHS = ("/opt/retdec/bin", "/usr/lib/nx/retdec/bin", "/usr/local/retdec/bin")
+
+
+def which(name):
+    """shutil.which plus the places NX / manual installs put RetDec."""
+    p = shutil.which(name)
+    if p:
+        return p
+    for d in EXTRA_PATHS:
+        c = os.path.join(d, name)
+        if os.path.isfile(c) and os.access(c, os.X_OK):
+            return c
+    return None
+
+
 def tools():
-    return {t: bool(shutil.which(t)) for t in ("ilspycmd", "retdec-decompiler", "node", "dotnet", "x86_64-w64-mingw32-gcc")}
+    return {t: bool(which(t)) for t in ("ilspycmd", "retdec-decompiler", "node", "dotnet", "x86_64-w64-mingw32-gcc")}
 
 
 def _run(cmd, timeout=900):
@@ -39,9 +54,9 @@ def decompile(root, rep, out):
             if rc == 0:
                 res.update(kind="dotnet-cs", src=dst, tool="ilspycmd"); return res
             res["notes"].append("ilspycmd failed: " + tail)
-        elif shutil.which("retdec-decompiler") and not info["dotnet"]:
+        elif which("retdec-decompiler") and not info["dotnet"]:
             dst = os.path.join(out, "native-c"); os.makedirs(dst, exist_ok=True)
-            rc, tail = _run(["retdec-decompiler", "-o", os.path.join(dst, "out.c"), os.path.join(root, rel)])
+            rc, tail = _run([which("retdec-decompiler"), "-o", os.path.join(dst, "out.c"), os.path.join(root, rel)])
             if rc == 0:
                 res.update(kind="native-c", src=dst, tool="retdec", exe=os.path.join(root, rel), arch=info["arch"]); return res
             res["notes"].append("retdec failed: " + tail)

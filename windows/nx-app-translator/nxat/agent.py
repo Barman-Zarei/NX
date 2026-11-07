@@ -37,6 +37,42 @@ def write_asar(src_dir, dst):
             o.write(b)
 
 
+def _safe_rel(src, rel):
+    p = os.path.realpath(os.path.join(src, str(rel)))
+    return p.startswith(os.path.realpath(src) + os.sep) and os.path.isfile(p)
+
+
+def _objects(text):
+    """Every JSON object in free text (models add prose / code fences around it). Scans each '{' with raw_decode."""
+    dec, out, i = json.JSONDecoder(), [], 0
+    text = text or ""
+    while True:
+        i = text.find("{", i)
+        if i < 0:
+            return out
+        try:
+            v, n = dec.raw_decode(text, i)
+        except ValueError:
+            i += 1; continue
+        if isinstance(v, dict):
+            out.append(v)
+        i += n
+
+
+def _parse_need(text):
+    for v in _objects(text):
+        if isinstance(v.get("need"), list) and "edits" not in v:
+            return [str(x) for x in v["need"]][:10]
+    return []
+
+
+def parse_edits(text):
+    for v in _objects(text):
+        if isinstance(v.get("edits"), list):
+            return v["edits"][:MAX_FILES], str(v.get("explanation", ""))[:300]
+    return [], ""
+
+
 def _confine(src, rel):
     p = os.path.realpath(os.path.join(src, rel))
     if not p.startswith(os.path.realpath(src) + os.sep) or not rel.lower().endswith(TEXT_EXT):
@@ -44,33 +80,6 @@ def _confine(src, rel):
     if not os.path.isfile(p):
         raise ValueError("file does not exist (new files are not accepted): " + rel)
     return p
-
-
-def _safe_rel(src, rel):
-    p = os.path.realpath(os.path.join(src, str(rel)))
-    return p.startswith(os.path.realpath(src) + os.sep) and os.path.isfile(p)
-
-
-def _parse_need(text):
-    for m in re.finditer(r"\{.*\}", text or "", re.S):
-        try:
-            v = json.loads(m.group(0))
-        except ValueError:
-            continue
-        if isinstance(v, dict) and isinstance(v.get("need"), list) and "edits" not in v:
-            return [str(x) for x in v["need"]][:10]
-    return []
-
-
-def parse_edits(text):
-    for m in re.finditer(r"\{.*\}", text or "", re.S):
-        try:
-            v = json.loads(m.group(0))
-        except ValueError:
-            continue
-        if isinstance(v, dict) and isinstance(v.get("edits"), list):
-            return v["edits"][:MAX_FILES], str(v.get("explanation", ""))[:300]
-    return [], ""
 
 
 def check(kind, src, saferun, log):
@@ -146,7 +155,7 @@ def run(dec, rep, adapter, log=print, rounds=3):
             if rel in shown or not os.path.isfile(p) or os.path.getsize(p) > budget:
                 continue
             body += "\n=== FILE %s ===\n%s" % (rel, workspace.read_text(p)); budget -= os.path.getsize(p); shown.append(rel)
-        st, out = adapter.call("ask", S.wrap(task, body), untrusted=False)
+        st, out = adapter.call("ask", S.wrap(task, body)[0], untrusted=False)
         if st != "ok":
             res["notes"].append("Brok unavailable (%s): stopped" % st); return res
         asked = _parse_need(out)

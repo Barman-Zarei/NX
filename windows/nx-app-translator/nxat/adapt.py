@@ -1,6 +1,6 @@
 """Apply the automatic fixes found by analyze(): PE version fields, import redirection (+ shim DLL), Electron runtime swap."""
 import os, shutil, urllib.request, zipfile
-from . import peutil as P
+from . import peutil as P, dotnet as DN
 
 ELECTRON_URL = "https://github.com/electron/electron/releases/download/v22.3.27/electron-v22.3.27-win32-%s.zip"
 
@@ -58,6 +58,18 @@ def adapt(root, rep, electron_zip=None):
         if n:
             log.append(n)
         rep = A.analyze(root)
+    for item in rep.get("dotnet", []):
+        cfg = os.path.join(root, item["config"])
+        if DN.retarget_runtimeconfig(cfg):
+            n = 0
+            for d_, _, fs in os.walk(os.path.dirname(cfg)):
+                for f in fs:
+                    if f.lower().endswith((".dll", ".exe")):
+                        try:
+                            n += len(DN.retarget_refs(os.path.join(d_, f)))
+                        except (ValueError, OSError):
+                            pass
+            log.append("%s: .NET %d -> 6.0 (EXPERIMENTAL; %d assembly references re-pointed; not verified against .NET 6 APIs)" % (item["config"], item["major"], n))
     for rel, info in sorted(rep["pe"].items()):
         if not info["violations"] or info["arch"] not in ("x86", "x64"):
             continue

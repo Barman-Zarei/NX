@@ -34,13 +34,16 @@ CompareObjectHandles -> handle equality; VirtualAlloc2/MapViewOfFile3 -> only th
 `ERROR_CALL_NOT_IMPLEMENTED`.
 
 ## Limits - read this
-* This is **not** a general decompiler/recompiler. It does not turn machine code into source and cannot make arbitrary software run on Windows 7;
-  it fixes the *loader-level* incompatibilities above. Apps that call newer APIs dynamically (GetProcAddress) or need new OS features will still fail at run time.
-* Modified binaries **lose their digital signature** (accepted by the maintainer); self-checking programs may refuse to run.
-* `--confirm` acknowledges the notice; Brok supervision (above) is what actually gates abuse. Do not redistribute translated third-party software.
-* **Verification status:** 25 unit tests pass on Python 3.8 and 3.12 (supervision and the agent loop use a FAKE Brok; the REAL Brok repo + adapter was run once without a model and correctly made gate 1 refuse - a real model was **not** available); translated sample x86 and x64 programs, the native installer (install, shortcut, registry, uninstall, corrupt/zip-slip refusal) and a real Electron 30 -> 22.3.27 swap (the swapped runtime started and ran our repacked `app.asar`) were **executed under Wine** (proxy: Wine also implements the newer APIs). **Never run on real Windows 7.**
-* Delay-load imports are not rewritten. The native stub needs nothing beyond Windows 7 SP1 (it links statically; only system DLLs).
+Status of each weakness (what was done about it and what is left):
+1. **Never run on real Windows 7.** Done about it: every shim export is exercised by a probe with the Windows 7 *fallback* code forced on (22+ checks, x86 + x64, under Wine), and `win7-selftest/` is a one-click kit (probe, shim, original-vs-translated program, native installer) to run on a real Windows 7 laptop: copy the kit folder, double-click `RUN-ME.bat`, send back `RESULT.txt`. **Still open until someone runs it.**
+2. **Real Brok with a real model not run.** Done: `nxat brok-selftest` feeds 6 synthetic fact sheets (3 benign, 3 suspicious) to the real Brok and prints expected vs. actual; verdicts need a per-call random id (a planted `{"allow": true}` in the app's data is ignored); content indicators (ransom phrases, stealer strings, Tor addresses) and API patterns hard-block before Brok is even asked; fail closed. **Still open: nobody has measured the real model.**
+3. **.NET (Core 7+):** EXPERIMENTAL downgrade (runtimeconfig -> 6.0 and System.*/Microsoft.* assembly references re-pointed to 6.0.0.0, needs `dnfile`); only works if the app uses no API newer than .NET 6 - not verified, no .NET runtime here. .NET Framework apps need nothing. No source-level rebuild (ilspycmd/NuGet unavailable).
+4. **Native code without source:** binary-level fixes (header, import redirection) are the dependable path. RetDec (real, tested) produces C, but that output does not compile back without errors (12 errors on a 20-line program: duplicate struct definitions); the Brok loop gets the compiler errors and may repair it, rebuild is attempted with mingw-w64 and re-checked. Treat source-level native rebuild as research-grade. **Frozen Python 3.9+ apps: not fixable** (bytecode is version-specific); reported as a blocker.
+5. **Supervision is not a guarantee** (heuristics and an LLM can both be wrong); it is fail-closed, audited, and has hard rules nobody can override.
+
+General notes: modified binaries lose their digital signature (accepted); `--confirm` acknowledges the notice, Brok supervision is what gates abuse; do not redistribute translated third-party software; delay-load imports are not rewritten; the native stub needs nothing beyond Windows 7 SP1.
+Verification so far (all under Wine, a proxy): 42 unit tests on Python 3.8 and 3.12 (supervision/agent loop use a FAKE Brok; real Brok repo run without a model = fail closed); translated x86/x64 programs, the native installer (install, shortcut, registry, uninstall, corrupt/zip-slip refusal) and a real Electron 30 -> 22.3.27 swap (the swapped runtime started and ran our repacked `app.asar`); the fallback probe in strict mode; the self-test kit's `RUN-ME.bat`.
 
 ## Build
 `sh shim/build.sh` (mingw-w64) -> `shim/bin/{x64,x86}/nxshim7.dll`; CI builds `nx-app-translator.exe` and `nx-app-installer.exe` (the stub) with PyInstaller 5.13.2.
-Tests: `python -m unittest discover -s tests` (compiler/shim tests skip if mingw is missing; `NXAT_WINE=1` also runs the programs under Wine).
+Brok check: `python -m nxat brok-selftest`. Windows 7 kit: `python win7-selftest/make_kit.py OUTDIR`. Tests: `python -m unittest discover -s tests` (compiler/shim tests skip if mingw is missing; `NXAT_WINE=1` also runs the programs under Wine).

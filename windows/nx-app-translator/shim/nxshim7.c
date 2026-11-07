@@ -10,12 +10,20 @@
 
 #define EXPORT __declspec(dllexport)
 
-static FARPROC real(const char *mod, const char *name) {
+static FARPROC lookup(const char *mod, const char *name) {
     HMODULE m = GetModuleHandleA(mod);
     if (!m) m = LoadLibraryA(mod);
     return m ? GetProcAddress(m, name) : NULL;
 }
+/* real(): the NEWER (Win8/10) implementation if this OS has it. Building with -DNXSHIM_FORCE_FALLBACK makes it always NULL, so the
+ * Windows 7 fallback code can be exercised and tested on any OS (tests only; never shipped). */
+#ifdef NXSHIM_FORCE_FALLBACK
+static FARPROC real(const char *mod, const char *name) { (void)mod; (void)name; return NULL; }
+#else
+static FARPROC real(const char *mod, const char *name) { return lookup(mod, name); }
+#endif
 #define REAL(type, mod, name) ((type)real(mod, name))
+#define WIN7(type, mod, name) ((type)lookup(mod, name))      /* APIs that exist on Windows 7 itself */
 
 /* ---- time ---- */
 EXPORT VOID WINAPI GetSystemTimePreciseAsFileTime(LPFILETIME out) {
@@ -94,7 +102,7 @@ EXPORT HRESULT WINAPI PathCchCanonicalizeEx(PWSTR out, SIZE_T cch, PCWSTR in, UL
     F f = REAL(F, "kernelbase.dll", "PathCchCanonicalizeEx");
     if (f && f != PathCchCanonicalizeEx) return f(out, cch, in, flags);
     typedef BOOL (WINAPI *PC)(LPWSTR, LPCWSTR);
-    PC pc = REAL(PC, "shlwapi.dll", "PathCanonicalizeW");
+    PC pc = WIN7(PC, "shlwapi.dll", "PathCanonicalizeW");
     WCHAR tmp[MAX_PATH];
     (void)flags;
     if (!pc || lstrlenW(in) >= MAX_PATH) return HRESULT_FROM_WIN32(ERROR_FILENAME_EXCED_RANGE);
@@ -112,7 +120,7 @@ EXPORT BOOL WINAPI SetProcessDpiAwarenessContext(HANDLE ctx) {
     F f = REAL(F, "user32.dll", "SetProcessDpiAwarenessContext");
     if (f && f != SetProcessDpiAwarenessContext) return f(ctx);
     typedef BOOL (WINAPI *S)(void);
-    S s = REAL(S, "user32.dll", "SetProcessDPIAware");
+    S s = WIN7(S, "user32.dll", "SetProcessDPIAware");
     return s ? s() : FALSE;
 }
 EXPORT INT WINAPI GetAwarenessFromDpiAwarenessContext(HANDLE ctx) {
