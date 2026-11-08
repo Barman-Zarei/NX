@@ -56,7 +56,8 @@ jobs:
       - run: sh windows/nx-app-translator/shim/build.sh
       - run: sh windows/nx-app-translator/stub/build.sh
       - run: python windows/check_win7_compat.py windows/nx-app-translator/shim/bin windows/nx-app-translator/stub/bin
-      - run: python -m pip install dnfile && sudo apt-get install -y mono-mcs
+      - run: python -m pip install dnfile && sudo apt-get install -y mono-mcs mono-runtime dotnet-sdk-8.0
+      - run: sh windows/nx-app-translator/tools/nxdecompile/setup.sh
       - run: NXAT_WINE=1 xvfb-run -a python -m unittest discover -s windows/nx-app-translator/tests -v
       - name: Build the Windows 7 self-test kit (run it on a real Windows 7 laptop)
         run: python windows/nx-app-translator/win7-selftest/make_kit.py kit

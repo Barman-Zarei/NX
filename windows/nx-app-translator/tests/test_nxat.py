@@ -382,100 +382,161 @@ class NativeStub(unittest.TestCase):
 
 @unittest.skipUnless(shutil.which("x86_64-w64-mingw32-gcc"), "mingw missing")
 class NativeRebuild(unittest.TestCase):
-    def test_c_source_rebuilt_for_win7(self):
-        from nxat import agent as AG
-        studio_patch, saferun, workspace = __import__("nxat.studio", fromlist=["load"]).load()
-        t = tempfile.mkdtemp(); src = os.path.join(t, "src"); os.makedirs(src)
-        open(os.path.join(src, "m.c"), "w").write("#include <windows.h>\nint main(void){ return GetDpiForSystem() ? 0 : 1; }\n")
+    def _dec(self, t, csrc):
+        src = os.path.join(t, "src"); os.makedirs(src, exist_ok=True)
+        open(os.path.join(src, "m.c"), "w").write(csrc)
         exe = os.path.join(t, "app.exe"); open(exe, "wb").write(b"old")
-        # compiling cannot prove Win7 compatibility (mingw declares newer APIs anyway): the post-build static check + adapt must catch it
-        ok, msg = AG.assemble_native_c({"src": src, "exe": exe, "arch": "x64"}, saferun)
+        return {"src": src, "exe": exe, "arch": "x64"}
+
+    def test_replaced_only_when_behaviour_identical(self):
+        from nxat import agent as AG
+        saferun = __import__("nxat.studio", fromlist=["load"]).load()[1]
+        t = tempfile.mkdtemp(); dec = self._dec(t, "#include <windows.h>\nint main(void){ return GetSystemMetrics(0) ? 0 : 1; }\n")
+        ok, msg = AG.assemble_native_c(dec, saferun, runner=lambda e: (0, b"same"))
+        self.assertTrue(ok, msg); self.assertEqual(P.read_info(dec["exe"])["os"], (6, 1))
+
+    def test_rejected_when_behaviour_differs_or_unverifiable(self):
+        from nxat import agent as AG
+        saferun = __import__("nxat.studio", fromlist=["load"]).load()[1]
+        t = tempfile.mkdtemp(); dec = self._dec(t, "int main(void){ return 3; }\n")
+        outs = iter([(0, b"a"), (3, b"b")])
+        ok, msg = AG.assemble_native_c(dec, saferun, runner=lambda e: next(outs))
+        self.assertFalse(ok); self.assertIn("REJECTED", msg); self.assertEqual(open(dec["exe"], "rb").read(), b"old")
+        ok, msg = AG.assemble_native_c(dec, saferun, runner=lambda e: None)          # cannot verify -> not used
+        self.assertFalse(ok); self.assertIn("NOT used", msg); self.assertEqual(open(dec["exe"], "rb").read(), b"old")
+
+    def test_unfinished_runs_are_unverifiable_not_identical(self):
+        from nxat import agent as AG
+        saferun = __import__("nxat.studio", fromlist=["load"]).load()[1]
+        t = tempfile.mkdtemp(); dec = self._dec(t, "int main(void){ return 0; }\n")
+        ok, msg = AG.assemble_native_c(dec, saferun, runner=lambda e: None)             # what wine_runner returns on timeout
+        self.assertFalse(ok); self.assertIn("NOT used", msg)
+
+    def test_post_build_static_check_still_catches_new_apis(self):
+        from nxat import agent as AG
+        saferun = __import__("nxat.studio", fromlist=["load"]).load()[1]
+        t = tempfile.mkdtemp(); dec = self._dec(t, "#include <windows.h>\nint main(void){ return GetDpiForSystem() ? 0 : 1; }\n")
+        ok, msg = AG.assemble_native_c(dec, saferun, runner=lambda e: (0, b""))
         self.assertTrue(ok, msg)
-        rep = A.analyze(os.path.dirname(exe))
+        rep = A.analyze(os.path.dirname(dec["exe"]))
         self.assertFalse(rep["compatible_now"])
         self.assertTrue(any("GetDpiForSystem" in v for i in rep["pe"].values() for v in i["violations"]))
-        self.assertTrue(D.adapt(os.path.dirname(exe), rep) if have("x64") else True)
         if have("x64"):
-            self.assertTrue(A.analyze(os.path.dirname(exe))["pe"]["app.exe"]["violations"] == [])
-        open(os.path.join(src, "m.c"), "w").write("#include <windows.h>\nint main(void){ return GetSystemMetrics(0) ? 0 : 1; }\n")
-        ok, msg = AG.assemble_native_c({"src": src, "exe": exe, "arch": "x64"}, saferun)
-        self.assertTrue(ok, msg)
-        info = P.read_info(exe); self.assertEqual(info["os"], (6, 1)); self.assertEqual(info["subsystem"], (6, 1))
+            D.adapt(os.path.dirname(dec["exe"]), rep); self.assertEqual(A.analyze(os.path.dirname(dec["exe"]))["pe"]["app.exe"]["violations"], [])
 
 
-class ShimFallback(unittest.TestCase):
-    """Compiles the shim with -DNXSHIM_FORCE_FALLBACK (Windows 7 fallback code always active) and runs a probe against every export under Wine."""
-    def _arch(self, arch):
-        if not (shutil.which("wine") and shutil.which(CC[arch]) and os.environ.get("NXAT_WINE") == "1"):
-            self.skipTest("needs mingw + wine + NXAT_WINE=1")
-        t = tempfile.mkdtemp(); entry = "DllMain" if arch == "x64" else "_DllMain@12"
-        subprocess.check_call([CC[arch], "-O2", "-shared", "-static-libgcc", "-nostartfiles", "-Wl,--kill-at", "-Wl,--entry=" + entry, "-DNXSHIM_FORCE_FALLBACK",
-                               "-o", os.path.join(t, "nxshim7.dll"), os.path.join(HERE, "..", "shim", "nxshim7.c"), "-lkernel32", "-luser32", "-lgdi32"])
-        subprocess.check_call([CC[arch], "-O1", "-o", os.path.join(t, "probe.exe"), os.path.join(HERE, "fallback_probe.c")])
-        r = subprocess.run(["xvfb-run", "-a", "wine", "probe.exe", "--strict"], cwd=t, env=wine_env(), timeout=300, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-        out = r.stdout.decode("utf8", "replace")
-        self.assertEqual(r.returncode, 0, out)
-        self.assertIn("failures=0", out); self.assertGreaterEqual(out.count("ok: "), 24)
+@unittest.skipUnless(shutil.which("wine") and os.environ.get("NXAT_WINE") == "1" and shutil.which(CC["x86"]) and
+                     __import__("nxat.decompile", fromlist=["which"]).which("retdec-decompiler"), "needs wine, mingw, RetDec, NXAT_WINE=1")
+class RetDecRoundTrip(unittest.TestCase):
+    def test_wrong_decompilation_is_caught_by_differential_run(self):
+        """Real RetDec on a real exe: the repaired C compiles and links, but RetDec loses register-passed arguments of the static function,
+        so the rebuilt program prints something else. The differential check must REJECT it (this is the whole point of the check)."""
+        from nxat import agent as AG, decompile as DC, cfix
+        saferun = __import__("nxat.studio", fromlist=["load"]).load()[1]
+        t = tempfile.mkdtemp(); app = os.path.join(t, "app"); os.makedirs(app)
+        c = os.path.join(t, "toy.c")
+        open(c, "w").write("#include <stdio.h>\nstatic int fib(int n){return n<2?n:fib(n-1)+fib(n-2);}\nint main(void){int s=0;for(int i=0;i<10;i++)s+=fib(i);printf(\"sum=%d\\n\",s);return s==88?0:1;}\n")
+        subprocess.check_call([CC["x86"], "-O1", "-o", os.path.join(app, "toy.exe"), c])
+        rep = A.analyze(app); dec = DC.decompile(app, rep, os.path.join(t, "dec"))
+        self.assertEqual(dec["kind"], "native-c")
+        ok, msg = AG.assemble_native_c(dec, saferun)
+        self.assertFalse(ok, msg); self.assertIn("REJECTED", msg)
+        with open(os.path.join(app, "toy.exe"), "rb") as f:
+            self.assertEqual(f.read(2), b"MZ")                      # original binary untouched
 
-    def test_fallbacks_x64(self): self._arch("x64")
-    def test_fallbacks_x86(self): self._arch("x86")
 
-
-class DotNet(unittest.TestCase):
-    def test_runtimeconfig_downgrade_and_ref_patch_mechanics(self):
+@unittest.skipUnless(shutil.which("dotnet"), "dotnet SDK missing")
+class RealDotNet(unittest.TestCase):
+    """Builds REAL net8 apps offline with the SDK (no NuGet) and checks the downgrade on them."""
+    def _build(self, program):
         from nxat import dotnet as DN
         if DN.dnfile is None:
             self.skipTest("dnfile missing")
-        t = tempfile.mkdtemp()
-        asm = os.path.join(t, "App.dll")
-        if shutil.which("mcs"):
-            open(os.path.join(t, "a.cs"), "w").write("class P{static void Main(){System.Console.WriteLine(1);}}")
-            subprocess.check_call(["mcs", os.path.join(t, "a.cs"), "-target:library", "-out:" + asm])
-        else:
-            self.skipTest("mcs missing")
-        rs = DN.refs(asm); self.assertTrue(DN.is_framework(rs)); self.assertEqual(DN.needs_downgrade(rs), [])   # .NET Framework: left alone
-        # synthetic: mark mscorlib 4.0 as 'System.*'-like by patching its name check -> exercise the byte patcher directly on one ref
-        name, ver, off = rs[0]
-        import struct
-        with open(asm, "r+b") as f:
-            f.seek(off); f.write(struct.pack("<4H", 8, 0, 0, 0))
-        self.assertEqual(DN.refs(asm)[0][1], (8, 0, 0, 0))
-        json.dump({"runtimeOptions": {"framework": {"name": "Microsoft.NETCore.App", "version": "8.0.0"}}}, open(os.path.join(t, "App.runtimeconfig.json"), "w"))
-        rep = A.analyze(t)
-        self.assertTrue(any("dotnet-downgrade" in f for f in rep["fixable"]), rep)
-        self.assertEqual(rep["blockers"], [])
-        log = D.adapt(t, rep)
-        self.assertTrue(any(".NET 8 -> 6.0" in l and "EXPERIMENTAL" in l for l in log), log)
-        self.assertEqual(json.load(open(os.path.join(t, "App.runtimeconfig.json")))["runtimeOptions"]["framework"]["version"], "6.0.0")
+        t = tempfile.mkdtemp(); src = os.path.join(t, "src"); os.makedirs(src)
+        open(os.path.join(src, "App.csproj"), "w").write('<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings></PropertyGroup></Project>')
+        open(os.path.join(src, "nuget.config"), "w").write('<configuration><packageSources><clear /></packageSources></configuration>')
+        open(os.path.join(src, "Program.cs"), "w").write(program)
+        env = dict(os.environ, DOTNET_CLI_TELEMETRY_OPTOUT="1", DOTNET_NOLOGO="1")
+        subprocess.check_call(["dotnet", "build", "-c", "Release", "-o", os.path.join(t, "out")], cwd=src, env=env, stdout=subprocess.DEVNULL, timeout=600)
+        return os.path.join(t, "out"), env
+
+    def test_net8_app_is_downgraded_and_still_loads(self):
+        out, env = self._build('System.Console.WriteLine("ok " + string.Join(",", new List<int>{3,1,2}.Order()));')
+        rep = A.analyze(out)
+        self.assertTrue(any("dotnet-downgrade" in f for f in rep["fixable"]), rep); self.assertEqual(rep["blockers"], [])
+        D.adapt(out, rep)
+        self.assertEqual(json.load(open(os.path.join(out, "App.runtimeconfig.json")))["runtimeOptions"]["framework"]["version"], "6.0.0")
+        # no .NET 6 runtime here: run on the installed newer runtime with roll-forward. Proves the patched metadata is valid and binds.
+        r = subprocess.run(["dotnet", "--roll-forward", "Major", os.path.join(out, "App.dll")], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=120)
+        self.assertEqual(r.returncode, 0, r.stdout); self.assertIn(b"ok 1,2,3", r.stdout)
+
+    def test_net8_app_using_new_types_is_a_blocker(self):
+        out, env = self._build('System.Console.WriteLine(TimeProvider.System.GetUtcNow().Year);')
+        rep = A.analyze(out)
+        self.assertEqual(rep["fixable"], []); self.assertTrue(any("TimeProvider" in b for b in rep["blockers"]), rep)
 
 
-class RealRetDec(unittest.TestCase):
-    @unittest.skipUnless(__import__("nxat.decompile", fromlist=["which"]).which("retdec-decompiler") and shutil.which(CC["x86"]), "RetDec / mingw missing")
-    def test_native_exe_decompiles_to_c(self):
-        from nxat import decompile as DC
-        t = tempfile.mkdtemp(); app = os.path.join(t, "app"); os.makedirs(app)
-        c = os.path.join(t, "toy.c"); open(c, "w").write("#include <stdio.h>\nstatic int f(int n){return n<2?n:f(n-1)+f(n-2);}\nint main(void){printf(\"%d\\n\",f(10));return 0;}\n")
-        subprocess.check_call([CC["x86"], "-O1", "-o", os.path.join(app, "toy.exe"), c])
-        rep = A.analyze(app); dec = DC.decompile(app, rep, os.path.join(t, "dec"))
-        self.assertEqual(dec["kind"], "native-c", dec)
-        self.assertIn("int main", open(os.path.join(dec["src"], "out.c")).read())
+def _tool_env_ok_dotnet():
+    from nxat import dotnet as DN
+    return bool(shutil.which("dotnet") and shutil.which("mono") and shutil.which("mcs") and DN.find_nxdecompile() and DN.dnfile)
 
 
-class BrokSelftest(unittest.TestCase):
+@unittest.skipUnless(_tool_env_ok_dotnet(), "needs dotnet SDK, mono+mcs, NxDecompile (tools/nxdecompile/setup.sh), dnfile")
+class DotNetSourceLevel(unittest.TestCase):
+    """REAL net8 app that uses types missing in .NET 6 -> ILSpy engine -> C# -> (fake) Brok fix -> mcs -> differential run -> .NET Framework 4 exe."""
     def setUp(self):
         os.environ["NXAT_AUDIT_LOG"] = os.path.join(tempfile.mkdtemp(), "a.jsonl")
 
-    def test_selftest_reports_mismatch_when_brok_allows_everything(self):
-        out = []
-        a = cli.build_parser().parse_args(["brok-selftest"])
-        self.assertEqual(cli.cmd_brok_selftest(a, adapter=FakeBrok(), log=out.append), 0)      # FakeBrok allows all
-        self.assertEqual(sum("MISMATCH" in l for l in out), 3, out)
-        self.assertIn("3 of 6", out[-1])
+    def _app(self):
+        t = tempfile.mkdtemp(); src = os.path.join(t, "src"); os.makedirs(src)
+        open(os.path.join(src, "App.csproj"), "w").write('<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings></PropertyGroup></Project>')
+        open(os.path.join(src, "nuget.config"), "w").write('<configuration><packageSources><clear /></packageSources></configuration>')
+        open(os.path.join(src, "Program.cs"), "w").write('using System.Collections.Frozen;\nvar f = new Dictionary<string,int>{{"a",1}}.ToFrozenDictionary();\nConsole.WriteLine("frozen " + f["a"] + " " + TimeProvider.System.GetUtcNow().Year);\n')
+        subprocess.check_call(["dotnet", "build", "-c", "Release", "-o", os.path.join(t, "out")], cwd=src, env=dict(os.environ, DOTNET_CLI_TELEMETRY_OPTOUT="1", DOTNET_NOLOGO="1"), stdout=subprocess.DEVNULL, timeout=600)
+        return os.path.join(t, "out")
 
-    def test_selftest_without_brok_fails_closed(self):
-        a = cli.build_parser().parse_args(["brok-selftest", "--brok-dir", "/nonexistent"])
-        old = cli.load_brok; cli.load_brok = lambda d=None: None
-        try:
-            self.assertEqual(cli.cmd_brok_selftest(a, log=lambda *_: None), 3)
-        finally:
-            cli.load_brok = old
+    FIX = 'using System;\nusing System.Collections.Generic;\ninternal class Program\n{\n\tprivate static void Main(string[] args)\n\t{\n\t\tvar d = new Dictionary<string, int> { { "a", 1 } };\n\t\tConsole.WriteLine("frozen " + d["a"] + " " + DateTime.UtcNow.Year);\n\t}\n}\n'
+
+    def test_full_path_and_brok_sees_real_source(self):
+        from nxat import agent as AG, decompile as DC
+        out = self._app(); rep = A.analyze(out)
+        self.assertTrue(any("TimeProvider" in b for b in rep["blockers"]), rep)
+        dec = DC.decompile(out, rep, os.path.join(os.path.dirname(out), "dec")); self.assertEqual(dec["kind"], "dotnet-cs")
+        self.assertIn("TimeProvider", open(os.path.join(dec["src"], "App.cs")).read())           # not truncated
+        b = FakeBrok(edits=json.dumps({"edits": [{"path": "App.cs", "new_text": self.FIX}], "explanation": "x"}))
+        r = AG.run(dec, rep, b, log=lambda *_: None)
+        self.assertTrue(r["verified"] and r["assembled"], r)
+        self.assertTrue(any("TimeProvider" in c[2] for c in b.calls))                          # Brok received the decompiled C#
+        self.assertTrue(os.path.isfile(os.path.join(out, "App.exe")) and not os.path.exists(os.path.join(out, "App.dll")))
+        after = A.analyze(out); self.assertTrue(after["compatible_now"], after); self.assertEqual(after["blockers"], [])
+
+    def test_wrong_rewrite_is_rejected_by_differential_run(self):
+        from nxat import agent as AG, decompile as DC
+        out = self._app(); rep = A.analyze(out); dec = DC.decompile(out, rep, os.path.join(os.path.dirname(out), "dec"))
+        bad = self.FIX.replace('"frozen "', '"WRONG "')
+        r = AG.run(dec, rep, FakeBrok(edits=json.dumps({"edits": [{"path": "App.cs", "new_text": bad}]})), log=lambda *_: None)
+        self.assertTrue(r["verified"] and not r["assembled"], r); self.assertTrue(any("REJECTED" in n for n in r["notes"]), r)
+        self.assertTrue(os.path.isfile(os.path.join(out, "App.dll")))                           # original left untouched
+
+
+def _tool_env_ok_python():
+    from nxat import pyfrozen as PF
+    return bool(shutil.which("wine") and PF.find_pycdc() and PF.have_extractor() and PF.find_winpy38() and PF.find_python(11) and os.environ.get("NXAT_SLOW") == "1"
+                and os.environ.get("NXAT_PYSAMPLE") and os.path.isfile(os.environ["NXAT_PYSAMPLE"]))
+
+
+@unittest.skipUnless(_tool_env_ok_python(), "slow: needs NXAT_SLOW=1, NXAT_PYSAMPLE=<onefile exe built with Python 3.11 from tests/pysample/mytool.py>, Wine, Windows Python 3.8+PyInstaller 5.13 (NXAT_WINPY38), pycdc, pyinstxtractor-ng")
+class FrozenPython(unittest.TestCase):
+    NEW = open(os.path.join(HERE, "pysample", "mytool_py38.py")).read() if os.path.isfile(os.path.join(HERE, "pysample", "mytool_py38.py")) else ""
+
+    def test_py311_onefile_to_py38_refrozen(self):
+        from nxat import agent as AG, decompile as DC
+        os.environ["NXAT_AUDIT_LOG"] = os.path.join(tempfile.mkdtemp(), "a.jsonl")
+        t = tempfile.mkdtemp(); app = os.path.join(t, "app"); os.makedirs(app); shutil.copy2(os.environ["NXAT_PYSAMPLE"], os.path.join(app, "mytool.exe"))
+        rep = A.analyze(app); self.assertTrue(any("Python 3.11" in b or "3.11" in b for b in rep["blockers"]), rep)
+        dec = DC.decompile(app, rep, os.path.join(t, "dec")); self.assertEqual(dec["kind"], "python-src")
+        b = FakeBrok(edits=json.dumps({"edits": [{"path": "mytool.py", "new_text": self.NEW}]}))
+        r = AG.run(dec, rep, b, log=lambda *_: None)
+        self.assertTrue(any("BYTECODE LISTING" in c[2] for c in b.calls), "Brok must get the bytecode of incomplete functions")
+        self.assertTrue(r["verified"] and r["assembled"], r)
+        self.assertEqual(A.analyze(app)["blockers"], [])

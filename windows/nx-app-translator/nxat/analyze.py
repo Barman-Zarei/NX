@@ -45,11 +45,16 @@ def analyze(root):
                     v = int(str(fw.get("version", "0")).split(".")[0])
                     rep["kinds"].append("dotnet-core")
                     if v > DOTNET_WIN7_MAX and "NETCore" in fw.get("name", ""):
+                        rep.setdefault("dotnet_core", []).append({"config": rel, "major": v})
                         if DN.dnfile is None:
                             rep["blockers"].append("%s targets .NET %d (no Windows 7 support); install `dnfile` for the experimental downgrade or rebuild for net6.0" % (rel, v))
                         else:
-                            rep["fixable"].append("dotnet-downgrade (EXPERIMENTAL): %s targets .NET %d -> re-point to 6.0; works only if no API newer than .NET 6 is used" % (rel, v))
-                            rep.setdefault("dotnet", []).append({"config": rel, "major": v})
+                            newer = sorted({t for q in os.listdir(d) if q.lower().endswith((".dll", ".exe")) for t in DN.post6_types(os.path.join(d, q))})
+                            if newer:
+                                rep["blockers"].append("%s uses types that do not exist in .NET 6 (%s): cannot be downgraded by re-pointing references; needs the source-level path (NxDecompile + Brok + mcs, .NET Framework 4 on Windows 7)" % (rel, ", ".join(newer)))
+                            else:
+                                rep["fixable"].append("dotnet-downgrade (EXPERIMENTAL): %s targets .NET %d -> re-point to 6.0; no known post-.NET-6 type found, other newer members are not checked" % (rel, v))
+                                rep.setdefault("dotnet", []).append({"config": rel, "major": v})
                 except (ValueError, OSError):
                     pass
             m = re.match(r"^python3(\d+)\.dll$", low)
@@ -62,6 +67,13 @@ def analyze(root):
             info = P.read_info(p)
             if not info:
                 continue
+            if low.endswith(".exe") and not info["dll"]:
+                from . import pyfrozen as PF
+                mn = PF.frozen_minor(p)                                # onefile PyInstaller apps carry python3NN.dll inside the archive
+                if mn:
+                    rep["kinds"].append("python-frozen")
+                    if (3, mn) > PY_WIN7_MAX:
+                        rep["blockers"].append("frozen Python 3.%d (%s, onefile): Python 3.9+ does not run on Windows 7; source must be recovered and re-frozen with 3.8" % (mn, rel))
             imp = [n for dll, ns in info["imports"] if dll.lower() != P.SHIM_DLL for n in ns]
             viol = P.W7.violations(info["os"], info["subsystem"], imp)
             if low in KNOWN_WIN7_OK:

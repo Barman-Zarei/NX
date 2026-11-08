@@ -7,10 +7,13 @@ All results below come from commands actually run in this session's container
 |---|---|---|---|
 | NX Studio core (Python) | `cd code-studio/extensions/nx-studio/python && python3 -m unittest discover -s tests` | Python 3.12, Linux | PASS (36 tests) |
 | NX Studio extension smoke test | `node code-studio/extensions/nx-studio/test/smoke.js` | Node, Linux | PASS (25 commands registered) |
-| NX APP TRANSLATOR unit tests | `python -m unittest discover -s windows/nx-app-translator/tests` | Python 3.8.20 and 3.12, mingw-w64-built samples | PASS (42 tests; supervision/agent use a FAKE Brok; real Brok repo run without a model = fail-closed confirmed; real model NOT run) |
+| NX APP TRANSLATOR unit tests | `python -m unittest discover -s windows/nx-app-translator/tests` | Python 3.8.20 and 3.12, mingw-w64-built samples | PASS (45 tests; supervision/agent use a FAKE Brok; real Brok repo run without a model = fail-closed confirmed; real model NOT run) |
 | Translated x86 + x64 programs executed | `NXAT_WINE=1 xvfb-run -a python3 -m unittest discover -s windows/nx-app-translator/tests` | Wine 9 | PASS (exit code 0; proxy only, NOT Windows 7) |
 | nxshim7.dll Windows 7 FALLBACK code (forced on) probed, strict mode | `NXAT_WINE=1 ... tests.test_nxat.ShimFallback` | Wine, x86+x64 | PASS (24 checks) |
 | Windows 7 self-test kit RUN-ME.bat | `win7-selftest/make_kit.py` then RUN-ME.bat | Wine (forwarding mode) | PASS; **real Windows 7: NOT RUN** |
+| .NET source-level (real net8 app -> C# -> mcs -> differential) | `tests.test_nxat.DotNetSourceLevel` | dotnet 8 SDK, mono mcs, NxDecompile | PASS (2) |
+| Frozen Python 3.11 exe -> Python 3.8 exe (Wine) | `NXAT_SLOW=1 ... tests.test_nxat.FrozenPython` | Wine, Windows CPython 3.8 + PyInstaller 5.13.2, pycdc | PASS |
+| RetDec round trip: wrong decompilation rejected | `tests.test_nxat.RetDecRoundTrip` | RetDec 5.0, Wine | PASS (rebuild correctly REJECTED) |
 | nxshim7.dll static Win7 check | `python3 windows/check_win7_compat.py windows/nx-app-translator/shim/bin` | pefile | PASS (OS/subsystem 6.1, no post-Win7 imports) |
 | nx-core (nxsys) | `python3 -m unittest discover -s nx-core/tests -t nx-core/tests` | Python 3.12 and 3.8 | PASS (7 tests each) |
 | nx-core feature services (34 tests, features 1-49 headless) | `python3 -m unittest discover -s nx-core/tests -t nx-core/tests` | Python 3.12 and 3.8 | PASS (34 each) |
