@@ -41,6 +41,24 @@ int main(int argc, char **argv) {
     FN(BOOL, (HANDLE, HANDLE), CompareObjectHandles)
     FN(BOOL, (int, PVOID, SIZE_T), SetProcessMitigationPolicy)
     FN(PVOID, (HANDLE, HANDLE, PVOID, ULONG64, SIZE_T, ULONG, ULONG, PVOID, ULONG), MapViewOfFile3)
+    FN(VOID, (PULONG_PTR, PULONG_PTR), GetCurrentThreadStackLimits)
+    FN(BOOL, (HANDLE, USHORT *, USHORT *), IsWow64Process2)
+    FN(BOOL, (HANDLE, int, PVOID, SIZE_T), GetProcessMitigationPolicy)
+    FN(BOOL, (HANDLE, int, PVOID, DWORD), GetThreadInformation)
+    FN(BOOL, (HANDLE, int, PVOID, DWORD), SetThreadInformation)
+    FN(BOOL, (HANDLE, int, PVOID, DWORD), GetProcessInformation)
+    FN(BOOL, (HANDLE, int, PVOID, DWORD), SetProcessInformation)
+    FN(BOOL, (HANDLE, ULONG_PTR, PVOID, ULONG), PrefetchVirtualMemory)
+    FN(DWORD, (PVOID, SIZE_T), DiscardVirtualMemory)
+    FN(HANDLE, (void), GetThreadDpiAwarenessContext)
+    FN(HANDLE, (HWND), GetWindowDpiAwarenessContext)
+    FN(BOOL, (HANDLE, HANDLE), AreDpiAwarenessContextsEqual)
+    FN(BOOL, (HANDLE), IsValidDpiAwarenessContext)
+    FN(UINT, (HANDLE), GetDpiFromDpiAwarenessContext)
+    FN(UINT, (HANDLE), GetSystemDpiForProcess)
+    FN(BOOL, (HANDLE), IsImmersiveProcess)
+    FN(BOOL, (BOOL), EnableMouseInPointer)
+    FN(BOOL, (void), IsMouseInPointerEnabled)
     FN(VOID, (PVOID), WakeByAddressSingle)
     FN(VOID, (PVOID), WakeByAddressAll)
     { FILETIME a, b; GetSystemTimePreciseAsFileTime(&a); Sleep(20); GetSystemTimePreciseAsFileTime(&b);
@@ -81,5 +99,28 @@ int main(int argc, char **argv) {
       CHECK(v != NULL, "MapViewOfFile3 plain case"); if (v) UnmapViewOfFile(v); CloseHandle(m);
       CHECK(MapViewOfFile3(m, NULL, NULL, 0, 4096, 0, PAGE_READWRITE, (PVOID)1, 1) == NULL, "MapViewOfFile3 extended params fail honestly"); }
     WakeByAddressSingle((PVOID)&gv); WakeByAddressAll((PVOID)&gv); CHECK(1, "WakeByAddress* do not crash");
+    { ULONG_PTR lo = 0, hi = 0; char probe; GetCurrentThreadStackLimits(&lo, &hi);
+      CHECK(lo && hi > lo && (ULONG_PTR)&probe >= lo && (ULONG_PTR)&probe < hi, "GetCurrentThreadStackLimits brackets a stack address"); }
+    { USHORT pm = 99, nm = 99; BOOL ok = IsWow64Process2(GetCurrentProcess(), &pm, &nm);
+#ifdef _WIN64
+      CHECKL(ok, ok && pm == 0 && nm == 0x8664, "IsWow64Process2 (64-bit process)");
+#else
+      CHECKL(ok, ok && (nm == 0x8664 || nm == 0x014c) && (pm == 0 || pm == 0x014c), "IsWow64Process2 (32-bit process)");
+#endif
+    }
+    { SetLastError(0); BOOL a = GetProcessMitigationPolicy(GetCurrentProcess(), 0, NULL, 0); DWORD e = GetLastError(); CHECKL(1, !a && e == ERROR_NOT_SUPPORTED, "GetProcessMitigationPolicy -> ERROR_NOT_SUPPORTED");
+      SetLastError(0); BOOL b = GetThreadInformation(GetCurrentThread(), 0, NULL, 0); e = GetLastError(); CHECKL(1, !b && e == ERROR_NOT_SUPPORTED, "GetThreadInformation -> ERROR_NOT_SUPPORTED");
+      SetLastError(0); BOOL c = SetThreadInformation(GetCurrentThread(), 0, NULL, 0); e = GetLastError(); CHECKL(1, !c && e == ERROR_NOT_SUPPORTED, "SetThreadInformation -> ERROR_NOT_SUPPORTED");
+      SetLastError(0); BOOL d = GetProcessInformation(GetCurrentProcess(), 0, NULL, 0); e = GetLastError(); CHECKL(1, !d && e == ERROR_NOT_SUPPORTED, "GetProcessInformation -> ERROR_NOT_SUPPORTED");
+      SetLastError(0); BOOL f = SetProcessInformation(GetCurrentProcess(), 0, NULL, 0); e = GetLastError(); CHECKL(1, !f && e == ERROR_NOT_SUPPORTED, "SetProcessInformation -> ERROR_NOT_SUPPORTED"); }
+    { char buf[64]; CHECKL(1, PrefetchVirtualMemory(GetCurrentProcess(), 0, NULL, 0) == TRUE, "PrefetchVirtualMemory harmless TRUE");
+      CHECKL(1, DiscardVirtualMemory(buf, 64) == 0, "DiscardVirtualMemory success"); }
+    { HANDLE c = GetThreadDpiAwarenessContext(); CHECKL(1, c == (HANDLE)(LONG_PTR)-2 && GetWindowDpiAwarenessContext(NULL) == c, "DPI awareness context = system aware");
+      CHECKL(1, AreDpiAwarenessContextsEqual(c, c) && !AreDpiAwarenessContextsEqual(c, (HANDLE)(LONG_PTR)-1), "AreDpiAwarenessContextsEqual");
+      CHECKL(1, IsValidDpiAwarenessContext((HANDLE)(LONG_PTR)-4) && !IsValidDpiAwarenessContext((HANDLE)(LONG_PTR)-9), "IsValidDpiAwarenessContext");
+      CHECKL(1, GetDpiFromDpiAwarenessContext((HANDLE)(LONG_PTR)-1) == 96 && GetDpiFromDpiAwarenessContext(c) == GetDpiForSystem(), "GetDpiFromDpiAwarenessContext");
+      CHECKL(1, GetSystemDpiForProcess(GetCurrentProcess()) == GetDpiForSystem(), "GetSystemDpiForProcess"); }
+    { SetLastError(0); BOOL e1 = EnableMouseInPointer(TRUE); DWORD le = GetLastError();
+      CHECKL(1, IsImmersiveProcess(GetCurrentProcess()) == FALSE && !e1 && le == ERROR_NOT_SUPPORTED && IsMouseInPointerEnabled() == FALSE, "IsImmersiveProcess / pointer-input stubs"); }
     printf("failures=%d\n", fails); return fails;
 }

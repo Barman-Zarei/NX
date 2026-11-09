@@ -10,7 +10,11 @@ SHIMMED = {"GetSystemTimePreciseAsFileTime", "SetThreadDescription", "GetThreadD
            "WakeByAddressAll", "CreateFile2", "GetCurrentPackageFullName", "GetCurrentPackageId", "SetProcessMitigationPolicy",
            "GetDpiForWindow", "GetDpiForSystem", "SetProcessDpiAwarenessContext", "GetSystemMetricsForDpi", "AdjustWindowRectExForDpi",
            "EnableNonClientDpiScaling", "GetAwarenessFromDpiAwarenessContext", "PathCchCanonicalizeEx", "VirtualAlloc2", "MapViewOfFile3",
-           "OfferVirtualMemory", "ReclaimVirtualMemory", "GetOverlappedResultEx", "CompareObjectHandles"}
+           "OfferVirtualMemory", "ReclaimVirtualMemory", "GetOverlappedResultEx", "CompareObjectHandles",
+           "GetCurrentThreadStackLimits", "IsWow64Process2", "GetProcessMitigationPolicy", "GetThreadInformation", "SetThreadInformation", "GetProcessInformation",
+           "SetProcessInformation", "PrefetchVirtualMemory", "DiscardVirtualMemory", "GetThreadDpiAwarenessContext", "GetWindowDpiAwarenessContext",
+           "AreDpiAwarenessContextsEqual", "IsValidDpiAwarenessContext", "GetDpiFromDpiAwarenessContext", "GetSystemDpiForProcess", "IsImmersiveProcess",
+           "EnableMouseInPointer", "IsMouseInPointerEnabled"}
 MACHINE_ARCH = {0x14C: "x86", 0x8664: "x64"}
 
 

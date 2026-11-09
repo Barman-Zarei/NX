@@ -138,10 +138,35 @@ def cmd_brok_selftest(a, adapter=None, log=print):
     return 0
 
 
+def cmd_audit_report(a, log=print):
+    """Summarises the supervision audit log so a human can review what Brok / the hard rules allowed and refused."""
+    import collections, json, time
+    path = a.log or S.audit_path()
+    if not os.path.isfile(path):
+        log("no audit log at %s" % path); return 0
+    n, by, rows = collections.Counter(), collections.Counter(), []
+    for line in open(path, encoding="utf-8"):
+        try:
+            e = json.loads(line)
+        except ValueError:
+            continue
+        n[(e.get("event"), e.get("decision"))] += 1; by[e.get("by")] += 1
+        if e.get("decision") == "deny":
+            rows.append(e)
+    log("audit log: %s" % path)
+    for (ev, dec), k in sorted(n.items(), key=lambda x: str(x)):
+        log("  %-6s %-6s %d" % (ev, dec, k))
+    log("decided by: " + ", ".join("%s=%d" % kv for kv in sorted(by.items(), key=lambda x: str(x))))
+    for e in rows[-a.last:]:
+        log("  DENIED %s  %s  by=%s  reason=%s" % (time.strftime("%Y-%m-%d %H:%M", time.localtime(e.get("ts", 0))), e.get("source", "?"), e.get("by"), (e.get("reason") or "")[:90]))
+    return 0
+
+
 def build_parser():
     p = argparse.ArgumentParser(prog="nxat", description=__doc__)
     s = p.add_subparsers(dest="cmd", required=True)
     x = s.add_parser("analyze"); x.add_argument("input"); x.add_argument("--json", action="store_true"); x.set_defaults(f=cmd_analyze)
+    ar = s.add_parser("audit-report"); ar.add_argument("--log"); ar.add_argument("--last", type=int, default=10); ar.set_defaults(f=cmd_audit_report)
     bs = s.add_parser("brok-selftest"); bs.add_argument("--brok-dir"); bs.set_defaults(f=cmd_brok_selftest)
     t = s.add_parser("translate"); t.add_argument("input"); t.add_argument("-o", "--output", required=True)
     t.add_argument("--name"); t.add_argument("--entry"); t.add_argument("--version", default=""); t.add_argument("--publisher", default="")

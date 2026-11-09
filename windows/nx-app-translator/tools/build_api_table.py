@@ -9,6 +9,11 @@ Output: {"dll_without_ext_lowercase": {"FunctionName": "windows8.0", ...}, ...} 
 Caveat: the 'Platform' field is Microsoft's *documented* minimum; an API that a Windows 7 update (KB) backports is still listed as newer."""
 import glob, json, os, re, sys
 
+# The metadata's "Platform" is trustworthy for these system DLLs (spot-checked against known Windows 7 binaries); for others (e.g. ws2_32:
+# InetPtonW/WSAPoll are listed as Windows 8 but exist on Vista/7) it produced false positives, so those DLLs are dropped.
+TRUSTED = {"advapi32", "api-ms-win-core-path-l1-1-0", "bcrypt", "combase", "comctl32", "crypt32", "d2d1", "d3d11", "d3d12", "d3d9", "dwmapi", "dwrite", "dxgi", "gdi32", "imm32", "kernel32", "kernelbase", "netapi32", "ntdll", "ole32", "oleaut32", "propsys", "rpcrt4", "secur32", "setupapi", "shcore", "shell32", "shlwapi", "sspicli", "user32", "uxtheme", "version", "winmm", "wintrust"}
+
+
 def ver(p):
     m = re.match(r"windows(\d+)\.(\d+)", p or "")
     return (int(m.group(1)), int(m.group(2))) if m else None
@@ -46,6 +51,8 @@ def main(api, out, good_dirs=()):
             v, dll = ver(fn.get("Platform")), fn.get("DllImport")
             if v and v > (6, 1) and dll:
                 key = re.sub(r"\.dll$", "", dll.lower())
+                if key not in TRUSTED and not key.startswith(("api-ms-win-core", "api-ms-win-crt", "api-ms-win-shcore")):
+                    continue
                 if (key, fn["Name"]) in good:
                     dropped += 1
                     continue

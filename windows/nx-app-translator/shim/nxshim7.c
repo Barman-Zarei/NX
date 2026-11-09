@@ -191,4 +191,123 @@ EXPORT BOOL WINAPI CompareObjectHandles(HANDLE a, HANDLE b) {
     return a == b;                                  /* approximation: identical handle values only */
 }
 
+/* ---- batch 2: simple APIs with exact or harmless Windows 7 fallbacks ---- */
+EXPORT VOID WINAPI GetCurrentThreadStackLimits(PULONG_PTR low, PULONG_PTR high) {
+    typedef VOID (WINAPI *F)(PULONG_PTR, PULONG_PTR);
+    F f = REAL(F, "kernel32.dll", "GetCurrentThreadStackLimits");
+    if (f && f != GetCurrentThreadStackLimits) { f(low, high); return; }
+    NT_TIB *tib = (NT_TIB *)NtCurrentTeb();                       /* exact: the TEB holds the same two values */
+    *low = (ULONG_PTR)tib->StackLimit; *high = (ULONG_PTR)tib->StackBase;
+}
+EXPORT BOOL WINAPI IsWow64Process2(HANDLE h, USHORT *proc, USHORT *native) {
+    typedef BOOL (WINAPI *F)(HANDLE, USHORT *, USHORT *);
+    F f = REAL(F, "kernel32.dll", "IsWow64Process2");
+    if (f && f != IsWow64Process2) return f(h, proc, native);
+    BOOL wow = FALSE;
+    if (!IsWow64Process(h, &wow)) return FALSE;
+#ifdef _WIN64
+    *native = 0x8664; *proc = 0;                                 /* a 64-bit process cannot be WOW64 */
+    (void)wow;
+#else
+    *proc = wow ? 0x014c : 0; *native = wow ? 0x8664 : 0x014c;   /* 32-bit process: on 64-bit Windows it is WOW64 (x64 host) */
+#endif
+    return TRUE;
+}
+EXPORT BOOL WINAPI GetProcessMitigationPolicy(HANDLE h, int policy, PVOID buf, SIZE_T len) {
+    typedef BOOL (WINAPI *F)(HANDLE, int, PVOID, SIZE_T);
+    F f = REAL(F, "kernel32.dll", "GetProcessMitigationPolicy");
+    if (f && f != GetProcessMitigationPolicy) return f(h, policy, buf, len);
+    SetLastError(ERROR_NOT_SUPPORTED); return FALSE;
+}
+EXPORT BOOL WINAPI GetThreadInformation(HANDLE h, int cls, PVOID buf, DWORD len) {
+    typedef BOOL (WINAPI *F)(HANDLE, int, PVOID, DWORD);
+    F f = REAL(F, "kernel32.dll", "GetThreadInformation");
+    if (f && f != GetThreadInformation) return f(h, cls, buf, len);
+    SetLastError(ERROR_NOT_SUPPORTED); return FALSE;
+}
+EXPORT BOOL WINAPI SetThreadInformation(HANDLE h, int cls, PVOID buf, DWORD len) {
+    typedef BOOL (WINAPI *F)(HANDLE, int, PVOID, DWORD);
+    F f = REAL(F, "kernel32.dll", "SetThreadInformation");
+    if (f && f != SetThreadInformation) return f(h, cls, buf, len);
+    SetLastError(ERROR_NOT_SUPPORTED); return FALSE;
+}
+EXPORT BOOL WINAPI GetProcessInformation(HANDLE h, int cls, PVOID buf, DWORD len) {
+    typedef BOOL (WINAPI *F)(HANDLE, int, PVOID, DWORD);
+    F f = REAL(F, "kernel32.dll", "GetProcessInformation");
+    if (f && f != GetProcessInformation) return f(h, cls, buf, len);
+    SetLastError(ERROR_NOT_SUPPORTED); return FALSE;
+}
+EXPORT BOOL WINAPI SetProcessInformation(HANDLE h, int cls, PVOID buf, DWORD len) {
+    typedef BOOL (WINAPI *F)(HANDLE, int, PVOID, DWORD);
+    F f = REAL(F, "kernel32.dll", "SetProcessInformation");
+    if (f && f != SetProcessInformation) return f(h, cls, buf, len);
+    SetLastError(ERROR_NOT_SUPPORTED); return FALSE;
+}
+EXPORT BOOL WINAPI PrefetchVirtualMemory(HANDLE h, ULONG_PTR n, PVOID entries, ULONG flags) {
+    typedef BOOL (WINAPI *F)(HANDLE, ULONG_PTR, PVOID, ULONG);
+    F f = REAL(F, "kernel32.dll", "PrefetchVirtualMemory");
+    if (f && f != PrefetchVirtualMemory) return f(h, n, entries, flags);
+    (void)h; (void)n; (void)entries; (void)flags; return TRUE;      /* advisory hint only */
+}
+EXPORT DWORD WINAPI DiscardVirtualMemory(PVOID a, SIZE_T s) {
+    typedef DWORD (WINAPI *F)(PVOID, SIZE_T);
+    F f = REAL(F, "kernel32.dll", "DiscardVirtualMemory");
+    if (f && f != DiscardVirtualMemory) return f(a, s);
+    (void)a; (void)s; return ERROR_SUCCESS;                          /* advisory: keeping the pages is always legal */
+}
+EXPORT HANDLE WINAPI GetThreadDpiAwarenessContext(void) {
+    typedef HANDLE (WINAPI *F)(void);
+    F f = REAL(F, "user32.dll", "GetThreadDpiAwarenessContext");
+    if (f && f != GetThreadDpiAwarenessContext) return f();
+    return (HANDLE)(LONG_PTR)-2;                                     /* DPI_AWARENESS_CONTEXT_SYSTEM_AWARE */
+}
+EXPORT HANDLE WINAPI GetWindowDpiAwarenessContext(HWND w) {
+    typedef HANDLE (WINAPI *F)(HWND);
+    F f = REAL(F, "user32.dll", "GetWindowDpiAwarenessContext");
+    if (f && f != GetWindowDpiAwarenessContext) return f(w);
+    return (HANDLE)(LONG_PTR)-2;
+}
+EXPORT BOOL WINAPI AreDpiAwarenessContextsEqual(HANDLE a, HANDLE b) {
+    typedef BOOL (WINAPI *F)(HANDLE, HANDLE);
+    F f = REAL(F, "user32.dll", "AreDpiAwarenessContextsEqual");
+    if (f && f != AreDpiAwarenessContextsEqual) return f(a, b);
+    return a == b;
+}
+EXPORT BOOL WINAPI IsValidDpiAwarenessContext(HANDLE c) {
+    typedef BOOL (WINAPI *F)(HANDLE);
+    F f = REAL(F, "user32.dll", "IsValidDpiAwarenessContext");
+    if (f && f != IsValidDpiAwarenessContext) return f(c);
+    LONG_PTR v = (LONG_PTR)c; return v >= -5 && v <= -1;
+}
+EXPORT UINT WINAPI GetDpiFromDpiAwarenessContext(HANDLE c) {
+    typedef UINT (WINAPI *F)(HANDLE);
+    F f = REAL(F, "user32.dll", "GetDpiFromDpiAwarenessContext");
+    if (f && f != GetDpiFromDpiAwarenessContext) return f(c);
+    LONG_PTR v = (LONG_PTR)c; return v == -1 ? 96 : (v >= -5 && v <= -2 ? sys_dpi() : 0);
+}
+EXPORT UINT WINAPI GetSystemDpiForProcess(HANDLE p) {
+    typedef UINT (WINAPI *F)(HANDLE);
+    F f = REAL(F, "user32.dll", "GetSystemDpiForProcess");
+    if (f && f != GetSystemDpiForProcess) return f(p);
+    (void)p; return sys_dpi();
+}
+EXPORT BOOL WINAPI IsImmersiveProcess(HANDLE p) {
+    typedef BOOL (WINAPI *F)(HANDLE);
+    F f = REAL(F, "user32.dll", "IsImmersiveProcess");
+    if (f && f != IsImmersiveProcess) return f(p);
+    (void)p; return FALSE;                                          /* Windows 7 has no immersive (Store) processes */
+}
+EXPORT BOOL WINAPI EnableMouseInPointer(BOOL on) {
+    typedef BOOL (WINAPI *F)(BOOL);
+    F f = REAL(F, "user32.dll", "EnableMouseInPointer");
+    if (f && f != EnableMouseInPointer) return f(on);
+    (void)on; SetLastError(ERROR_NOT_SUPPORTED); return FALSE;
+}
+EXPORT BOOL WINAPI IsMouseInPointerEnabled(void) {
+    typedef BOOL (WINAPI *F)(void);
+    F f = REAL(F, "user32.dll", "IsMouseInPointerEnabled");
+    if (f && f != IsMouseInPointerEnabled) return f();
+    return FALSE;
+}
+
 BOOL WINAPI DllMain(HINSTANCE h, DWORD why, LPVOID r) { (void)h; (void)why; (void)r; return TRUE; }

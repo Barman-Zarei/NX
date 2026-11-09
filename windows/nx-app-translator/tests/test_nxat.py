@@ -547,13 +547,13 @@ class ApiTable(unittest.TestCase):
     that known-good Windows 7 binaries import (CPython 3.8, Electron 22, PyInstaller 5.13 bootloaders)."""
     def test_table_loaded_and_flags_real_post_win7_apis(self):
         W7 = P.W7
-        self.assertGreater(sum(len(v) for v in W7.table().values()), 1000)
+        self.assertGreater(sum(len(v) for v in W7.table().values()), 300)
         pairs = [("KERNEL32.dll", "GetSystemTimePreciseAsFileTime"), ("KERNEL32.dll", "CreateFileW"), ("api-ms-win-core-path-l1-1-0.dll", "PathCchCombineEx"),
                  ("USER32.dll", "GetDpiForWindow")]
         self.assertEqual(W7.newer_than_win7(pairs), ["GetDpiForWindow", "GetSystemTimePreciseAsFileTime", "PathCchCombineEx"])
 
     def test_winsock_and_common_apis_are_not_flagged(self):
-        pairs = [("WS2_32.dll", n) for n in ("WSAStartup", "send", "recv", "getaddrinfo", "closesocket")] + [("KERNEL32.dll", n) for n in ("CreateFileW", "VirtualAlloc", "GetTickCount64")]
+        pairs = [("WS2_32.dll", n) for n in ("WSAStartup", "send", "recv", "getaddrinfo", "closesocket", "InetPtonW", "WSAPoll", "WSAAccept")] + [("KERNEL32.dll", n) for n in ("CreateFileW", "VirtualAlloc", "GetTickCount64")]
         self.assertEqual(P.W7.newer_than_win7(pairs), [])
 
     @unittest.skipUnless(os.environ.get("NXAT_WINPY38") and os.path.isfile(os.environ.get("NXAT_WINPY38", "")), "needs a Windows CPython 3.8 tree (NXAT_WINPY38)")
@@ -567,3 +567,14 @@ class ApiTable(unittest.TestCase):
         bad = P.W7.scan(os.path.dirname(os.environ["NXAT_WINPY311"]))
         dll = [v for p, v in bad.items() if p.lower().endswith("python311.dll")]
         self.assertTrue(dll and "PathCchCombineEx" in dll[0][0])
+
+
+class AuditReport(unittest.TestCase):
+    def test_report_lists_denials(self):
+        t = tempfile.mkdtemp(); os.environ["NXAT_AUDIT_LOG"] = os.path.join(t, "a.jsonl")
+        rep = {"pe": {}, "kinds": [], "files": 1, "blockers": [], "notes": [], "fixable": []}
+        S.gate_translate(FakeBrok(), rep, "ok-app.exe"); S.gate_translate(FakeBrok(), rep, "Office_keygen.exe"); S.gate_translate(None, rep, "x.exe")
+        out = []
+        self.assertEqual(cli.cmd_audit_report(cli.build_parser().parse_args(["audit-report"]), log=out.append), 0)
+        text = "\n".join(out)
+        self.assertIn("gate1  allow  1", text); self.assertIn("gate1  deny   2", text); self.assertIn("Office_keygen.exe", text); self.assertIn("by=rules", text)
