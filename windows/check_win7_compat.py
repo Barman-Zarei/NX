@@ -15,13 +15,46 @@ POST_WIN7 = {
 }
 
 
-def violations(os_ver, subsys_ver, imports):
+_TABLE = None
+
+
+def table():
+    """{dll: {function: minimum OS}} for every Win32 function newer than Windows 7 (built by nx-app-translator/tools/build_api_table.py from
+    the win32json metadata). Empty if the data file is absent (then only POST_WIN7 above is used)."""
+    global _TABLE
+    if _TABLE is None:
+        import json
+        p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "nx-app-translator", "nxat", "data", "win7_missing_apis.json")
+        try:
+            _TABLE = json.load(open(p))
+        except (OSError, ValueError):
+            _TABLE = {}
+    return _TABLE
+
+
+def newer_than_win7(pairs):
+    """pairs = [(dll_name, function)] -> sorted function names that do not exist on Windows 7. api-ms-win-* contract DLLs are matched by function name."""
+    t, out = table(), set()
+    allnames = None
+    for dll, name in pairs:
+        key = dll.lower()[:-4] if dll.lower().endswith(".dll") else dll.lower()
+        if name in t.get(key, {}):
+            out.add(name)
+        elif key.startswith("api-ms-win-") or key.startswith("ext-ms-win-"):
+            if allnames is None:
+                allnames = {n for d in t.values() for n in d}
+            if name in allnames:
+                out.add(name)
+    return sorted(out)
+
+
+def violations(os_ver, subsys_ver, imports, pairs=None):
     out = []
     if tuple(os_ver) > WIN7:
         out.append("MajorOS/MinorOS version %d.%d > 6.1" % tuple(os_ver))
     if tuple(subsys_ver) > WIN7:
         out.append("subsystem version %d.%d > 6.1" % tuple(subsys_ver))
-    bad = sorted(set(imports) & POST_WIN7)
+    bad = sorted((set(imports) & POST_WIN7) | set(newer_than_win7(pairs or [])))
     if bad:
         out.append("static imports not available on Windows 7: " + ", ".join(bad))
     return out
@@ -42,9 +75,10 @@ def scan(root):
                 continue
             n += 1
             o = pe.OPTIONAL_HEADER
-            imps = [e.name.decode() for ent in getattr(pe, "DIRECTORY_ENTRY_IMPORT", []) for e in ent.imports if e.name]
+            pairs = [(ent.dll.decode("latin1"), e.name.decode()) for ent in getattr(pe, "DIRECTORY_ENTRY_IMPORT", []) for e in ent.imports if e.name]
+            imps = [n for _, n in pairs]
             v = violations((o.MajorOperatingSystemVersion, o.MinorOperatingSystemVersion),
-                           (o.MajorSubsystemVersion, o.MinorSubsystemVersion), imps)
+                           (o.MajorSubsystemVersion, o.MinorSubsystemVersion), imps, pairs)
             if v:
                 bad[p] = v
             if f.lower().startswith(("msvcp140", "vcruntime140", "python3", "qt5core")):

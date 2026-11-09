@@ -540,3 +540,30 @@ class FrozenPython(unittest.TestCase):
         self.assertTrue(any("BYTECODE LISTING" in c[2] for c in b.calls), "Brok must get the bytecode of incomplete functions")
         self.assertTrue(r["verified"] and r["assembled"], r)
         self.assertEqual(A.analyze(app)["blockers"], [])
+
+
+class ApiTable(unittest.TestCase):
+    """The static Windows 7 check is backed by a table of 1272 Win32 functions newer than Windows 7 (win32json metadata), minus functions
+    that known-good Windows 7 binaries import (CPython 3.8, Electron 22, PyInstaller 5.13 bootloaders)."""
+    def test_table_loaded_and_flags_real_post_win7_apis(self):
+        W7 = P.W7
+        self.assertGreater(sum(len(v) for v in W7.table().values()), 1000)
+        pairs = [("KERNEL32.dll", "GetSystemTimePreciseAsFileTime"), ("KERNEL32.dll", "CreateFileW"), ("api-ms-win-core-path-l1-1-0.dll", "PathCchCombineEx"),
+                 ("USER32.dll", "GetDpiForWindow")]
+        self.assertEqual(W7.newer_than_win7(pairs), ["GetDpiForWindow", "GetSystemTimePreciseAsFileTime", "PathCchCombineEx"])
+
+    def test_winsock_and_common_apis_are_not_flagged(self):
+        pairs = [("WS2_32.dll", n) for n in ("WSAStartup", "send", "recv", "getaddrinfo", "closesocket")] + [("KERNEL32.dll", n) for n in ("CreateFileW", "VirtualAlloc", "GetTickCount64")]
+        self.assertEqual(P.W7.newer_than_win7(pairs), [])
+
+    @unittest.skipUnless(os.environ.get("NXAT_WINPY38") and os.path.isfile(os.environ.get("NXAT_WINPY38", "")), "needs a Windows CPython 3.8 tree (NXAT_WINPY38)")
+    def test_corpus_python38_is_clean(self):
+        root = os.path.dirname(os.environ["NXAT_WINPY38"])
+        bad = {p: v for p, v in P.W7.scan(root).items() if "arm64" not in p.lower() and "-arm" not in p.lower() and "w64-arm" not in p.lower()}
+        self.assertEqual(bad, {})
+
+    @unittest.skipUnless(os.environ.get("NXAT_WINPY311") and os.path.isfile(os.environ.get("NXAT_WINPY311", "")), "needs a Windows CPython 3.11 tree (NXAT_WINPY311)")
+    def test_corpus_python311_is_flagged_for_the_real_reason(self):
+        bad = P.W7.scan(os.path.dirname(os.environ["NXAT_WINPY311"]))
+        dll = [v for p, v in bad.items() if p.lower().endswith("python311.dll")]
+        self.assertTrue(dll and "PathCchCombineEx" in dll[0][0])

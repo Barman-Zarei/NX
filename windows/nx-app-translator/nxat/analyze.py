@@ -74,11 +74,12 @@ def analyze(root):
                     rep["kinds"].append("python-frozen")
                     if (3, mn) > PY_WIN7_MAX:
                         rep["blockers"].append("frozen Python 3.%d (%s, onefile): Python 3.9+ does not run on Windows 7; source must be recovered and re-frozen with 3.8" % (mn, rel))
-            imp = [n for dll, ns in info["imports"] if dll.lower() != P.SHIM_DLL for n in ns]
-            viol = P.W7.violations(info["os"], info["subsystem"], imp)
+            pairs = [(dll, n) for dll, ns in info["imports"] if dll.lower() != P.SHIM_DLL for n in ns]
+            imp = [n for _, n in pairs]
+            viol = P.W7.violations(info["os"], info["subsystem"], imp, pairs)
             if low in KNOWN_WIN7_OK:
                 viol = [v for v in viol if "version" not in v]
-            post = sorted(set(imp) & P.W7.POST_WIN7)
+            post = sorted((set(imp) & P.W7.POST_WIN7) | set(P.W7.newer_than_win7(pairs)))
             info["post_win7"] = post
             info["unshimmable"] = [n for n in post if n not in P.SHIMMED]
             info["violations"] = viol
