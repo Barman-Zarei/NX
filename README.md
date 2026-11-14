@@ -33,6 +33,8 @@ The project is being developed incrementally. The repository includes operating-
 
 NX is not simply a launcher or a single desktop application: it is intended to become an installable operating-system distribution. The current state of each component must be evaluated from its implementation, documentation, and test results.
 
+NX OS is a operating system from Nexora-Techno organization
+
 **Project principles**
 - **Modular engineering:** keep system components and supporting tools organized.
 - **Verifiable progress:** distinguish existing code from tested behavior and future plans.
